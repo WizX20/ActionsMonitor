@@ -4602,6 +4602,36 @@ _MANAGED_UPGRADE_CMD = {
 }
 
 
+def _cleanup_stale_mei_dirs(min_age_seconds: int = 86400) -> None:
+    """Remove `_MEI*` dirs left over from force-killed PyInstaller processes.
+
+    `os._exit(0)` and `taskkill /F` skip PyInstaller's atexit cleanup hook, so
+    `restart_app()` and the helper batch's force-kill leave temp dirs behind.
+    Skips the live `_MEI` (this process's extraction), skips dirs newer than
+    `min_age_seconds` to avoid racing concurrent launches, and swallows every
+    OS error so a locked dir can't crash startup.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        tmp_dir = Path(tempfile.gettempdir())
+        live_mei = Path(getattr(sys, "_MEIPASS", "")).resolve() if getattr(sys, "_MEIPASS", None) else None
+        cutoff = time.time() - min_age_seconds
+        for entry in tmp_dir.glob("_MEI*"):
+            try:
+                if not entry.is_dir():
+                    continue
+                if live_mei and entry.resolve() == live_mei:
+                    continue
+                if entry.stat().st_mtime > cutoff:
+                    continue
+                shutil.rmtree(entry, ignore_errors=True)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
 class UpdateChecker:
     REPO_URL = "https://github.com/WizX20/ActionsMonitor"
     RELEASES_API = "https://api.github.com/repos/WizX20/ActionsMonitor/releases/latest"
@@ -4825,6 +4855,14 @@ class UpdateChecker:
                 f'  move /y "{old_path}" "{current_exe}" >> "%LOG%" 2>&1\r\n'
                 "  exit /b 1\r\n"
                 ")\r\n"
+                # Warmup read forces a synchronous AV scan of the freshly
+                # swapped exe before PyInstaller's bootstrap starts unpacking
+                # to _MEI*. Without it, Defender can lock or quarantine
+                # python312.dll mid-extraction and the relaunch dies with
+                # "Failed to load Python DLL ... module not found".
+                'echo [warming new exe for AV scan] >> "%LOG%"\r\n'
+                f'type "{current_exe}" > nul 2>&1\r\n'
+                'ping -n 3 127.0.0.1 >nul\r\n'
                 'echo [launching new exe] >> "%LOG%"\r\n'
                 f'start "" "{current_exe}"\r\n'
                 'echo [done] >> "%LOG%"\r\n'
@@ -4884,6 +4922,12 @@ class UpdateChecker:
                 "  exit 1\n"
                 "fi\n"
                 f'chmod +x "{current_exe}"\n'
+                # Warmup read + brief settle — mirror of the Windows helper.
+                # Most Linux AVs are passive but the read keeps inotify watchers
+                # quiet and gives the FS a moment to flush after the rename.
+                "echo '[warming new exe]'\n"
+                f'cat "{current_exe}" > /dev/null 2>&1\n'
+                "sleep 1\n"
                 "echo '[launching new exe]'\n"
                 f'nohup "{current_exe}" >/dev/null 2>&1 &\n'
                 "echo '[done]'\n"
@@ -6183,6 +6227,7 @@ def main():
                 Path(sys.executable).with_suffix(suffix).unlink(missing_ok=True)
             except OSError:
                 pass
+        _cleanup_stale_mei_dirs()
 
     if IS_WINDOWS:
         _ensure_focus_vbs()
