@@ -4102,6 +4102,18 @@ class _ClickableLabel(QLabel):
                 webbrowser.open(url)
 
 
+class _TitleLabel(_ClickableLabel):
+    """ClickableLabel with a preferred-min width — sizeHint is `max(natural, MIN)`
+    so short titles look balanced; minimumSizeHint stays small so the label can
+    shrink and wrap when the window narrows."""
+
+    PREFERRED_MIN = 450
+
+    def sizeHint(self):
+        sh = super().sizeHint()
+        return QSize(max(sh.width(), self.PREFERRED_MIN), sh.height())
+
+
 def _link_css(color: str, size: int, hover: str = FG_LINK) -> str:
     """Stylesheet for a clickable label: base color + amber hover via :hover pseudo-state."""
     return (f"QLabel {{ color: {color}; font-size: {size}px; }} "
@@ -4164,37 +4176,70 @@ class WorkflowRow(QWidget):
         centre.setContentsMargins(0, 8, 0, 6)
         centre.setSpacing(0)
 
-        # PR title (shown above top_row for PR mode)
-        self._pr_title_lbl = _ClickableLabel(
+        # PR title row: title (left) + target arrow (right) — PR mode only.
+        pr_title_row = QHBoxLayout()
+        pr_title_row.setContentsMargins(0, 0, 0, 0)
+        pr_title_row.setSpacing(0)
+
+        self._pr_title_lbl = _TitleLabel(
             url_fn=lambda: self._state.pr_url)
         self._pr_title_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
         self._pr_title_lbl.setToolTip("Open PR on GitHub")
         self._pr_title_lbl.setMinimumWidth(0)
         self._pr_title_lbl.setWordWrap(True)
-        self._pr_title_lbl.setVisible(False)
-        centre.addWidget(self._pr_title_lbl)
+        pr_title_row.addWidget(self._pr_title_lbl, 0)
+
+        pr_title_row.addSpacing(20)
+
+        # Target label — PR-mode only; the `→ target` suffix links to the branch tree.
+        self._target_lbl = _ClickableLabel(url_fn=self._target_url)
+        self._target_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
+        self._target_lbl.setToolTip("Open branch on GitHub")
+        self._target_lbl.setMinimumWidth(0)
+        self._target_lbl.setWordWrap(False)
+        self._target_lbl.setVisible(False)
+        # Branch/target labels stay content-sized; trailing stretch absorbs
+        # extra width so the subtitle stays flush-left next to the title.
+        pr_title_row.addWidget(self._target_lbl, 0)
+        pr_title_row.addStretch(1)
+
+        self._pr_title_widget = QWidget()
+        self._pr_title_widget.setLayout(pr_title_row)
+        self._pr_title_widget.setVisible(False)
+        centre.addWidget(self._pr_title_widget)
 
         # Top row: name + branch
-        top_row = QHBoxLayout()
-        top_row.setContentsMargins(0, 0, 0, 0)
-        top_row.setSpacing(0)
+        self._top_row = QHBoxLayout()
+        self._top_row.setContentsMargins(0, 0, 0, 0)
+        self._top_row.setSpacing(0)
 
-        self._name_lbl = _ClickableLabel(state.name, url_fn=self._name_url)
+        self._name_lbl = _TitleLabel(state.name, url_fn=self._name_url)
         self._name_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
         self._name_lbl.setMinimumWidth(0)
         self._name_lbl.setWordWrap(True)
-        top_row.addWidget(self._name_lbl, 1)
+        self._top_row.addWidget(self._name_lbl, 0)
 
+        # Toggleable 20px gap between name and branch — hidden in PR mode
+        # (name hidden) so the branch slug aligns flush-left with the title.
+        self._name_branch_gap = QWidget()
+        self._name_branch_gap.setFixedWidth(20)
+        self._top_row.addWidget(self._name_branch_gap)
+
+        # Branch label — in PR mode shows `#PR  branch-slug` and links to
+        # the latest run; in branch/actor mode shows the branch and links
+        # to the branch tree.
         self._branch_lbl = _ClickableLabel(url_fn=self._branch_url)
         self._branch_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
         self._branch_lbl.setToolTip("Open branch on GitHub")
         self._branch_lbl.setMinimumWidth(0)
-        self._branch_lbl.setWordWrap(True)
+        self._branch_lbl.setWordWrap(False)
         self._branch_lbl.setVisible(False)
-        top_row.addWidget(self._branch_lbl, 1)
+        # Both labels sized to content; trailing stretch absorbs extra width
+        # so the subtitle stays flush-left next to the title.
+        self._top_row.addWidget(self._branch_lbl, 0)
 
-        top_row.addStretch()
-        centre.addLayout(top_row)
+        self._top_row.addStretch(1)
+        centre.addLayout(self._top_row)
 
         # Badge row
         badge_layout = QHBoxLayout()
@@ -4288,8 +4333,15 @@ class WorkflowRow(QWidget):
 
     def _branch_url(self) -> Optional[str]:
         s = self._state
-        # Branch label opens the branch tree page; falls back to run_url so a
-        # click never feels dead when branch_url couldn't be resolved.
+        # In PR mode the branch label carries `#PR  branch-slug` and points at
+        # the latest run; the target label handles the branch link. In
+        # branch/actor mode there is no split, so it stays as the branch link.
+        if s.pr_number:
+            return s.run_url or s.url
+        return s.branch_url or s.run_url or s.url
+
+    def _target_url(self) -> Optional[str]:
+        s = self._state
         return s.branch_url or s.run_url or s.url
 
     def _on_right_click(self, pos):
@@ -4325,6 +4377,7 @@ class WorkflowRow(QWidget):
             self._name_lbl.setStyleSheet(_link_css(dim_text, 12))
             self._poll_lbl.setStyleSheet(f"color: {dim_muted}; font-size: 11px;")
             self._branch_lbl.setStyleSheet(_link_css(dim_muted, 11))
+            self._target_lbl.setStyleSheet(_link_css(dim_muted, 11))
             self._pr_title_lbl.setStyleSheet(_link_css(dim_text, 12))
             if self._icon_opacity is None:
                 self._icon_opacity = QGraphicsOpacityEffect(self._icon_lbl)
@@ -4337,6 +4390,7 @@ class WorkflowRow(QWidget):
             self._name_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
             self._poll_lbl.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px;")
             self._branch_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
+            self._target_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
             self._pr_title_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
             if self._icon_opacity is not None:
                 self._icon_opacity.setOpacity(1.0)
@@ -4395,20 +4449,34 @@ class WorkflowRow(QWidget):
             # to the workflow name (so the title link can point at the workflow).
             if s.pr_title:
                 self._name_lbl.setVisible(False)
+                self._name_branch_gap.setVisible(False)
                 self._pr_title_lbl.setText(s.pr_title)
-                self._pr_title_lbl.setVisible(True)
+                self._pr_title_widget.setVisible(True)
             else:
                 self._name_lbl.setText(s.name)
                 self._name_lbl.setVisible(True)
-                self._pr_title_lbl.setVisible(False)
+                self._name_branch_gap.setVisible(True)
+                self._pr_title_widget.setVisible(False)
 
             branch_text = s.branch_short or s.head_branch
             if s.pr_number:
                 branch_text = f"#{s.pr_number}  {branch_text}"
-            if s.pr_target:
-                branch_text += f" \u2192 {s.pr_target}"
             self._branch_lbl.setText(branch_text)
             self._branch_lbl.setVisible(True)
+            # In PR mode the branch label is the run link; the target arrow
+            # is its own label so the branch name remains the branch link.
+            # branch_lbl keeps stretch=1 so target_lbl sits at the same
+            # column as the branch subtitle in non-PR rows.
+            if s.pr_number:
+                self._branch_lbl.setToolTip("Open latest run on GitHub")
+                if s.pr_target:
+                    self._target_lbl.setText(s.pr_target)
+                    self._target_lbl.setVisible(True)
+                else:
+                    self._target_lbl.setVisible(False)
+            else:
+                self._branch_lbl.setToolTip("Open branch on GitHub")
+                self._target_lbl.setVisible(False)
 
             if s.branch_prefix:
                 self._prefix_lbl.setText(s.branch_prefix)
@@ -4484,8 +4552,10 @@ class WorkflowRow(QWidget):
             if s.branch:
                 self._branch_lbl.setText(s.branch)
                 self._branch_lbl.setVisible(True)
+                self._branch_lbl.setToolTip("Open branch on GitHub")
             else:
                 self._branch_lbl.setVisible(False)
+            self._target_lbl.setVisible(False)
             self._prefix_lbl.setVisible(False)
             self._draft_lbl.setVisible(False)
             self._conflict_lbl.setVisible(False)
@@ -4493,7 +4563,8 @@ class WorkflowRow(QWidget):
             self._jira_lbl.setVisible(False)
             self._review_lbl.setVisible(False)
             self._stale_lbl.setVisible(False)
-            self._pr_title_lbl.setVisible(False)
+            self._pr_title_widget.setVisible(False)
+            self._name_branch_gap.setVisible(True)
 
             self._snooze_lbl.setVisible(self._snoozed)
             self._badge_widget.setVisible(self._snoozed)
@@ -5227,6 +5298,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(400, 200)
+        self.setMaximumWidth(720)
         self.resize(560, 420)
 
         _generate_app_ico()
@@ -5503,7 +5575,7 @@ class MainWindow(QMainWindow):
         try:
             x = int(win["x"])
             y = int(win["y"])
-            w = max(int(win["width"]), 400)
+            w = min(max(int(win["width"]), 400), 720)
             h = max(int(win["height"]), 200)
             areas = _get_monitor_work_areas()
             if areas and not _rect_overlaps(x, y, w, h, areas):
