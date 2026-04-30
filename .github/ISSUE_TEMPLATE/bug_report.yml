@@ -1,0 +1,95 @@
+name: Bug report
+description: Something doesn't work the way it should.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. The more concrete the repro, the faster it gets fixed.
+        Please make sure your `github_token` is **redacted** anywhere it appears.
+
+  - type: checkboxes
+    id: prechecks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched [open and closed issues](https://github.com/WizX20/ActionsMonitor/issues?q=) for duplicates.
+          required: true
+        - label: I redacted my `github_token` from any config or log snippets below.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Actions Monitor version
+      description: Shown in the app footer (e.g. `v2026.04.30 (f48a2c2)`).
+      placeholder: "v2026.04.30 (f48a2c2)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 10
+        - Windows 11
+        - Linux (Ubuntu / Debian)
+        - Linux (Fedora / RHEL)
+        - Linux (other)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install method
+      options:
+        - winget
+        - Scoop
+        - Direct download (`.exe` / `ActionsMonitor-linux`)
+        - Running from source (`python src/main.py`)
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Number the steps so they can be followed verbatim.
+      placeholder: |
+        1. Configure a workflow with `mode: "pr"` …
+        2. Open a draft PR on that branch …
+        3. Wait one polling cycle …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the full text of any error dialog, plus relevant lines from the console (run `python src/main.py` to see logs).
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant `config.yaml` slice
+      description: Just the workflow entry / global block involved. **Redact `github_token`.**
+      render: yaml
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (optional)
+      description: Drag-and-drop image into this box.

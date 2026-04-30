@@ -2,6 +2,14 @@
 
 ### 2026-04-30
 
+- **Add `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`** — repo now has the two GitHub community-profile files. `CONTRIBUTING.md` covers issue reporting, security disclosure (private security advisory), PR submission, branch + commit conventions, and code-style guard rails specific to this codebase (single-file layout, `_github_api_get` for all API traffic, queue-only thread comms). Cross-links to `DEVGUIDE.md` for build/release and `CLAUDE.md` for architecture. `CODE_OF_CONDUCT.md` is Contributor Covenant 2.1 verbatim, matching the WizX20 house style. `README.md` "Contributing" section now points at `CONTRIBUTING.md` first and references the CoC.
+
+- **Enable Dependabot for Python deps and GitHub Actions** — `.github/dependabot.yml` watches `src/requirements.txt` (pip ecosystem) and `.github/workflows/*.yml` (github-actions ecosystem). Weekly cadence (Mondays 06:00 Europe/Amsterdam), 5 open PRs per ecosystem, `chore(scope):` commit prefix matching house style, labels `dependencies` + `python` / `ci` so they sort cleanly alongside the new issue templates.
+
+- **Add GitHub issue + PR templates** — under `.github/`: `ISSUE_TEMPLATE/bug_report.yml` and `ISSUE_TEMPLATE/feature_request.yml` are the YAML form schema (structured fields, required pre-flight checkboxes including a token-redaction acknowledgement on bug reports). `ISSUE_TEMPLATE/config.yml` disables blank issues and adds two contact links: GitHub Discussions for questions, private security advisory for vulnerabilities. `PULL_REQUEST_TEMPLATE.md` carries the standard What/Why/Testing/Screenshots/Checklist split, with the checklist enforcing the project-specific rules (`CHANGELOG.md` updated, `config.template.yaml` updated when config changes, `_github_api_get` only, no widget calls from pollers). Templates auto-load on issue / PR creation via the `.github/` paths.
+
+### 2026-04-30
+
 - **PR row layout: target link lifted to title row, subtitles flush-left, window width capped** — the second line (`#4338  EDU-8852-…  →  acceptance`) was a single label pointing at the branch tree, so clicking the PR/branch slug took you off to the branch instead of the latest run. The arrow / target also drifted around the row depending on width. Reworked into:
   - `_branch_lbl` carries `#PR  branch-slug` → run URL (tooltip "Open latest run on GitHub"), new `_target_lbl` carries the target branch name → branch URL (tooltip "Open branch on GitHub", 12px right padding via `setContentsMargins`). `_branch_url()` returns `run_url` when `s.pr_number` is set, else `branch_url`.
   - `_target_lbl` lives in a new `_pr_title_widget` HBox alongside `_pr_title_lbl` (PR mode only) so the target sits inline with the PR title — matches the workflows row layout. `_pr_title_widget.setVisible(...)` toggles the whole row in one shot.

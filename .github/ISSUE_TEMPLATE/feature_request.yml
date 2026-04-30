@@ -1,0 +1,64 @@
+name: Feature request
+description: Suggest an enhancement or new capability.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the use case first, the proposed solution second. The use case is what gets the change scoped correctly — the solution can change during discussion.
+
+  - type: checkboxes
+    id: prechecks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched [open and closed issues](https://github.com/WizX20/ActionsMonitor/issues?q=) for an existing request.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: The user-facing scenario. Skip the implementation for now.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you imagine it working from the user's point of view (UI, config, behaviour).
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this touch?
+      multiple: true
+      options:
+        - Branch mode
+        - PR mode
+        - Actor mode
+        - URL mode
+        - Notifications
+        - Tray / system integration
+        - Visual / UI
+        - Configuration
+        - Update / release flow
+        - Build / packaging (winget / Scoop / installer)
+        - Cross-cutting / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Mockups, links, related projects, reference implementations.

@@ -196,4 +196,4 @@ Running from source does not auto-update — use `git pull` manually.
 
 ## Contributing
 
-Running from source, building binaries, and the release pipeline are documented in [DEVGUIDE.md](DEVGUIDE.md).
+Bug reports, feature ideas, and pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get started. Running from source, building binaries, and the release pipeline are documented in [DEVGUIDE.md](DEVGUIDE.md). All participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

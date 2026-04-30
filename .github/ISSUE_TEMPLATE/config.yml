@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or general discussion
+    url: https://github.com/WizX20/ActionsMonitor/discussions
+    about: For usage questions, ideas you're not sure about, or general chatter — use Discussions instead of Issues.
+  - name: Security vulnerability
+    url: https://github.com/WizX20/ActionsMonitor/security/advisories/new
+    about: Do not open a public issue for security bugs. Use a private security advisory.
