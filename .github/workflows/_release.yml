@@ -37,6 +37,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify CI on main is green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Block release when the latest completed CI run on main is not
+          # success. Daily Build (cron) and Release (manual dispatch) both
+          # funnel through here, so this single gate covers both callers.
+          CONCLUSION=$(gh run list -w ci.yml -b main --status completed -L 1 --json conclusion -q '.[0].conclusion' 2>/dev/null || echo "")
+          if [ -z "$CONCLUSION" ]; then
+            echo "No completed CI run on main yet — allowing release through."
+          elif [ "$CONCLUSION" != "success" ]; then
+            echo "Latest CI run on main is '$CONCLUSION'. Refusing to release."
+            exit 1
+          else
+            echo "Latest CI run on main is success."
+          fi
+
       - name: Check for changes since last release
         id: check
         env:
@@ -61,81 +78,15 @@ jobs:
             echo "Changes detected ($SHORT)"
           fi
 
-  build-windows:
+  build:
     needs: check
     if: needs.check.outputs.should_build == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: pip install -r src/requirements.txt
-
-      - name: Generate app icon
-        run: python -c "import sys; sys.path.insert(0, 'src'); from main import _generate_app_ico; _generate_app_ico()"
-
-      - name: Embed build version
-        run: |
-          echo '"""Build version — written by CI."""' > src/version.py
-          echo 'BUILD_COMMIT = "${{ needs.check.outputs.short_sha }}"' >> src/version.py
-
-      - name: Build executable
-        run: >
-          pyinstaller --onefile --noconsole
-          --name ActionsMonitor
-          --icon=app.ico
-          --add-data "config.template.yaml;."
-          src/main.py
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: windows-binary
-          path: dist/ActionsMonitor.exe
-
-  build-linux:
-    needs: check
-    if: needs.check.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-tk gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
-
-      - name: Install Python dependencies
-        run: |
-          grep -vi winotify src/requirements.txt | pip install -r /dev/stdin
-          pip install pyinstaller
-
-      - name: Embed build version
-        run: |
-          echo '"""Build version — written by CI."""' > src/version.py
-          echo "BUILD_COMMIT = \"${{ needs.check.outputs.short_sha }}\"" >> src/version.py
-
-      - name: Build binary
-        run: >
-          pyinstaller --onefile
-          --name ActionsMonitor-linux
-          --add-data "config.template.yaml:."
-          src/main.py
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: linux-binary
-          path: dist/ActionsMonitor-linux
+    uses: ./.github/workflows/_build.yml
+    with:
+      short_sha: ${{ needs.check.outputs.short_sha }}
 
   release:
-    needs: [check, build-windows, build-linux]
+    needs: [check, build]
     if: needs.check.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     outputs:

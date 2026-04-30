@@ -1,0 +1,110 @@
+name: Build (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      short_sha:
+        description: "7-char commit SHA to embed as BUILD_COMMIT. Leave empty to derive from HEAD."
+        type: string
+        required: false
+        default: ""
+      upload_artifacts:
+        description: "Upload built binaries as workflow artifacts."
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r src/requirements.txt
+
+      - name: Generate app icon
+        run: python -c "import sys; sys.path.insert(0, 'src'); from main import _generate_app_ico; _generate_app_ico()"
+
+      - name: Resolve build SHA
+        id: sha
+        shell: bash
+        run: |
+          IN="${{ inputs.short_sha }}"
+          if [ -z "$IN" ]; then
+            IN=$(git rev-parse --short=7 HEAD)
+          fi
+          echo "short_sha=$IN" >> "$GITHUB_OUTPUT"
+
+      - name: Embed build version
+        shell: bash
+        run: |
+          echo '"""Build version — written by CI."""' > src/version.py
+          echo "BUILD_COMMIT = \"${{ steps.sha.outputs.short_sha }}\"" >> src/version.py
+
+      - name: Build executable
+        run: >
+          pyinstaller --onefile --noconsole
+          --name ActionsMonitor
+          --icon=app.ico
+          --add-data "config.template.yaml;."
+          src/main.py
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.upload_artifacts }}
+        with:
+          name: windows-binary
+          path: dist/ActionsMonitor.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
+
+      - name: Install Python dependencies
+        run: |
+          grep -vi winotify src/requirements.txt | pip install -r /dev/stdin
+          pip install pyinstaller
+
+      - name: Resolve build SHA
+        id: sha
+        run: |
+          IN="${{ inputs.short_sha }}"
+          if [ -z "$IN" ]; then
+            IN=$(git rev-parse --short=7 HEAD)
+          fi
+          echo "short_sha=$IN" >> "$GITHUB_OUTPUT"
+
+      - name: Embed build version
+        run: |
+          echo '"""Build version — written by CI."""' > src/version.py
+          echo "BUILD_COMMIT = \"${{ steps.sha.outputs.short_sha }}\"" >> src/version.py
+
+      - name: Build binary
+        run: >
+          pyinstaller --onefile
+          --name ActionsMonitor-linux
+          --add-data "config.template.yaml:."
+          src/main.py
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.upload_artifacts }}
+        with:
+          name: linux-binary
+          path: dist/ActionsMonitor-linux

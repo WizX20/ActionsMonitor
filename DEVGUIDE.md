@@ -51,11 +51,24 @@ pip3 install --break-system-packages -r src/requirements.txt pyinstaller
 
 Releases are driven by `.github/workflows/release.yml` (manual dispatch only). The workflow:
 
-1. **`check`** — compares HEAD to the latest release's `targetCommitish`; skips if identical.
-2. **`build-windows`** / **`build-linux`** — run PyInstaller on `windows-latest` / `ubuntu-latest`; embed a 7-char commit SHA into `src/version.py`.
+1. **`check`** — first verifies that the latest completed CI run on `main` is `success` (`gh run list -w ci.yml -b main --status completed -L 1`); aborts the release if not. Then compares HEAD to the latest release's `targetCommitish`; skips if identical.
+2. **`build`** — calls the reusable `_build.yml` workflow (shared with CI). Runs PyInstaller on `windows-latest` / `ubuntu-latest`; embeds a 7-char commit SHA into `src/version.py`.
 3. **`release`** — tags `v$(date -u +%Y.%m.%d)`, deletes any same-day tag, creates the GitHub Release with `ActionsMonitor.exe` + `ActionsMonitor-linux` attached, and uses the first dated block of `CHANGELOG.md` as the release body.
 4. **`update-scoop`** — computes the SHA256 of the uploaded exe, bumps `bucket/actionsmonitor.json` (version, URL, hash), and commits back to `main`.
 5. **`update-winget`** — runs `wingetcreate update WizX20.ActionsMonitor` on the new release URL and submits a PR to `microsoft/winget-pkgs`.
+
+### CI workflow
+
+`.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It calls the same `_build.yml` reusable workflow, so PR builds use the identical PyInstaller pipeline as releases — Windows + Linux artifacts are attached to each run for download.
+
+#### Required status checks (branch protection)
+
+Configure on GitHub: **Settings → Branches → Branch protection rules → `main`**. Enable **Require status checks to pass before merging** and select:
+
+- `build / build-windows`
+- `build / build-linux`
+
+A PR with a failing CI run is then blocked from merging. Names appear in the picker after the first CI run lands; trigger one PR first if the list is empty.
 
 ### Required secrets
 

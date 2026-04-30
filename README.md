@@ -9,6 +9,9 @@
 
 # Actions Monitor
 
+[![CI](https://github.com/WizX20/ActionsMonitor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WizX20/ActionsMonitor/actions/workflows/ci.yml)
+[![Daily Build](https://github.com/WizX20/ActionsMonitor/actions/workflows/build.yml/badge.svg)](https://github.com/WizX20/ActionsMonitor/actions/workflows/build.yml)
+
 A lightweight tray application that monitors GitHub Actions workflow statuses and notifies you when something changes. Runs on Windows and Linux.
 
 > See the [Changelog](CHANGELOG.md) for updates.
