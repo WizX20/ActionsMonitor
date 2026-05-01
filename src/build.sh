@@ -31,7 +31,7 @@ else
 fi
 
 echo "Generating app icon..."
-(cd src && python3 -c "from main import _generate_app_ico; _generate_app_ico()")
+(cd src && python3 -c "from icons import _generate_app_ico; from pathlib import Path; _generate_app_ico(Path('..') / 'app.ico')")
 
 echo "Building Linux binary..."
 python3 -m PyInstaller --onefile --windowed \

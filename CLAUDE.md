@@ -22,7 +22,7 @@ When running as a `.exe`, place `config.yaml` next to the executable (project ro
 
 ## Architecture
 
-Everything lives in `src/main.py` — single-file application by design.
+Two source files: `src/main.py` (config, pollers, widgets, MainWindow, notifications, update flow) and `src/icons.py` (all PIL icon rendering — Lucide glyphs, header / reviewer / snooze icons, WizX20 mark, app/tray base icon, `_pil_to_qpixmap` Qt bridge, and the `_status_qpixmaps` / `_snooze_qpixmaps` / `_base_icon_cache` / `_wizx20_mark_cache` / `_REVIEWER_ICON_B64` caches). `icons.py` is self-contained — it owns its own copies of `COLOUR_BG`, the seven status string literals, and the amber `_FG_LINK` default, so `main.py` can import from it without circular-import risk.
 
 ### File paths and frozen mode
 
@@ -123,7 +123,7 @@ Warm dark theme using stone/amber tones. Key constants:
 - `BG_DARK`, `BG_ROW`, `BG_ROW_ALT` — background shades (stone-800/900)
 - `FG_TEXT`, `FG_MUTED`, `FG_LINK` — text colours (stone-200, stone-400, amber-400)
 - `COLOUR` — status → hex colour mapping (used for accent bars, tray dots)
-- `COLOUR_BG` — status → muted fill for icon circles (white glyph on top)
+- `COLOUR_BG` — status → muted fill for icon circles (white glyph on top); lives in `icons.py` as `_COLOUR_BG`
 
 ### Status icons
 
@@ -139,14 +139,14 @@ Lucide-inspired icons rendered with PIL at 4x supersampling + LANCZOS downscale.
 | Skipped | Skip-forward | `_draw_lucide_skip_forward` |
 | Unknown | Question mark | `_draw_lucide_circle_help` |
 
-`_init_status_icons()` generates `QPixmap` objects after `QApplication` exists, cached in `_status_qpixmaps`. Adding a new status requires updating: `COLOUR`, `COLOUR_BG`, `_STATUS_ICON_FUNC`, `STATUS_LABEL`, and `CONCLUSION_MAP`.
+`_init_status_icons()` generates `QPixmap` objects after `QApplication` exists, cached in `_status_qpixmaps` (both in `icons.py`). Adding a new status requires updating `main.py` (`COLOUR`, `STATUS_LABEL`, `CONCLUSION_MAP`, plus the `ST_*` constants) **and** `icons.py` (`_ST_*` literals, `_COLOUR_BG`, `_STATUS_ICON_FUNC`, the `_init_status_icons` tuple, and the matching `_draw_lucide_*` function).
 
 ### App and tray icons
 
 - `_make_base_icon(size)` — amber play triangle on warm dark rounded rect (supersampled)
 - `_make_icon_image(colour, size)` — base icon + coloured status dot (3-layer: dark outline → white ring → fill)
 - `_make_refresh_icon(size, colour)` — Lucide rotate-cw (circular arrow) for the header refresh button; defaults to `FG_LINK` (amber)
-- `_generate_app_ico()` — writes `app.ico` with embedded 16/32/48/256px sizes (largest first for proper ICO embedding); skips regeneration if `app.ico` already exists
+- `_generate_app_ico(path)` — writes `app.ico` with embedded 16/32/48/256px sizes (largest first for proper ICO embedding) to the given path; called at startup with `APP_ICO`, and at build time by `build.bat` / `build.sh` / `_build.yml` with the project-root `app.ico` path
 - Window icon set via both `iconbitmap` (`.ico` file) and `wm_iconphoto` (PIL images at multiple sizes)
 
 ### Tooltips

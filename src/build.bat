@@ -8,7 +8,7 @@ set "SRC=%~dp0"
 
 echo Generating app icon...
 cd /d "%SRC%"
-python -c "from main import _generate_app_ico; _generate_app_ico()"
+python -c "from icons import _generate_app_ico; from pathlib import Path; _generate_app_ico(Path(r'%ROOT%') / 'app.ico')"
 cd /d "%ROOT%"
 
 echo Building dist folder...

@@ -31,7 +31,7 @@ jobs:
         run: pip install -r src/requirements.txt
 
       - name: Generate app icon
-        run: python -c "import sys; sys.path.insert(0, 'src'); from main import _generate_app_ico; _generate_app_ico()"
+        run: python -c "import sys; sys.path.insert(0, 'src'); from icons import _generate_app_ico; from pathlib import Path; _generate_app_ico(Path('app.ico'))"
 
       - name: Resolve build SHA
         id: sha
