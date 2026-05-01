@@ -22,7 +22,13 @@ When running as a `.exe`, place `config.yaml` next to the executable (project ro
 
 ## Architecture
 
-Two source files: `src/main.py` (config, pollers, widgets, MainWindow, notifications, update flow) and `src/icons.py` (all PIL icon rendering — Lucide glyphs, header / reviewer / snooze icons, WizX20 mark, app/tray base icon, `_pil_to_qpixmap` Qt bridge, and the `_status_qpixmaps` / `_snooze_qpixmaps` / `_base_icon_cache` / `_wizx20_mark_cache` / `_REVIEWER_ICON_B64` caches). `icons.py` is self-contained — it owns its own copies of `COLOUR_BG`, the seven status string literals, and the amber `_FG_LINK` default, so `main.py` can import from it without circular-import risk.
+Three source files:
+
+- `src/main.py` — config, pollers, widgets, MainWindow, notifications, update flow.
+- `src/icons.py` — all PIL icon rendering (Lucide glyphs, header / reviewer / snooze icons, WizX20 mark, app/tray base icon, `_pil_to_qpixmap` Qt bridge, plus the `_status_qpixmaps` / `_snooze_qpixmaps` / `_base_icon_cache` / `_wizx20_mark_cache` / `_REVIEWER_ICON_B64` caches). Self-contained: owns its own copies of `COLOUR_BG`, the seven status string literals, and the amber `_FG_LINK` default.
+- `src/gh_api.py` — GitHub API plumbing: HTTP layer (`_github_api_get`, `_github_graphql_post`), rate-limit gate (`RateLimited`, cooldown timestamps), ETag conditional-request cache, retry wrapper, URL parsers / builders (`parse_workflow_url`, `_build_workflow_url`, `_build_branch_url`, `parse_actor_url`), endpoint fetchers (`fetch_latest_run`, `fetch_pr_runs`, `fetch_actor_runs`, `fetch_github_username`), username cache + `reset_username_cache()` public hook, generic `_prune_cache` + `_PR_CACHE_MAX` / `_REVIEW_CACHE_MAX` caps, and the PR-review aggregation pipeline (`_compile_bot_regex`, `_aggregate_review_status`, `_cached_review_fetch`, `_cached_unresolved_fetch`). Self-contained: no imports from main.
+
+Both extracted modules are import-only consumers of `requests` / `PIL` / `PySide6` and pass dependency-check failures through the friendly Qt dialog because their imports sit below the dep-check block in `main.py`.
 
 ### File paths and frozen mode
 
@@ -194,13 +200,13 @@ Global `staleness_thresholds` config controls when PR-mode rows show a staleness
 
 ### Shared helpers
 
-- `_gh_headers(token)` — builds standard GitHub API request headers (Accept, API version, optional Bearer token). All GitHub API calls use this.
-- `_resolve_status(api_status, conclusion)` — maps GitHub API `status`/`conclusion` fields to internal status constants (`ST_SUCCESS`, `ST_FAILURE`, etc.) via `CONCLUSION_MAP`.
+- `gh_api._gh_headers(token)` — builds standard GitHub API request headers (Accept, API version, optional Bearer token). All GitHub API calls use this.
+- `_resolve_status(api_status, conclusion)` — lives in `main.py`; maps GitHub API `status`/`conclusion` fields to internal status constants (`ST_SUCCESS`, `ST_FAILURE`, etc.) via `CONCLUSION_MAP`.
 - `PRWorkflowPoller._cache_pr(pr_num, pr_data)` — updates the PR detail cache from any GitHub Pulls API response dict.
 
 ### GitHub username caching
 
-`fetch_github_username()` calls `GET /user` once and caches the result in a module-level variable behind a lock. The cache is reset on config reload (in case the token changes).
+`gh_api.fetch_github_username()` calls `GET /user` once and caches the result in a module-level variable behind a lock. `_reload_pollers` calls `gh_api.reset_username_cache()` on config reload (in case the token changed).
 
 ### Named sounds
 
