@@ -1,5 +1,9 @@
 # Changelog
 
+### 2026-05-06
+
+- **Daily Build no longer self-perpetuates via Scoop manifest bump** — `_release.yml`'s `check` job compared `git rev-parse HEAD` against the latest release's `targetCommitish`, but the `update-scoop` job pushes `bucket/actionsmonitor.json` to `main` after every release. Result: each Daily Build saw "main moved" (the bot's scoop bump from yesterday), built a fresh release, and the cycle repeated forever — releases page showed a new tag every morning even when no human had committed. The `check` step now runs `git diff --name-only LATEST HEAD -- . ':(exclude)bucket/actionsmonitor.json'`; if the only change since the last release is the scoop manifest, `should_build=false` and the run skips cleanly. Manual `workflow_dispatch` of `Release` is unaffected because real commits land outside the exclude path.
+
 ### 2026-05-01
 
 - **Relicensed under Business Source License 1.1 (BUSL-1.1)** — replaced the bespoke `WizX20 Free Use License` with the SPDX-listed `BUSL-1.1` (Licensor: WizX20; Change Date: 2030-05-01; Change License: Apache 2.0). The Additional Use Grant preserves the original intent — free for personal, internal, organisational, academic, and free-redistribution use — while explicitly forbidding sale, paid sublicensing, rental, and paid hosted/embedded distribution. NOTICE retention requirement is restated inside the Additional Use Grant. After the Change Date, each release auto-converts to Apache 2.0. Updated `LICENSE`, `NOTICE`, README "License" section, `CONTRIBUTING.md` contributor agreement, `DEVGUIDE.md` winget submission table, and the Scoop manifest's `license` field.

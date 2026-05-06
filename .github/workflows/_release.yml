@@ -72,6 +72,12 @@ jobs:
           if [ "$LATEST" = "$HEAD" ]; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
             echo "No changes since last release ($SHORT)"
+          elif [ -n "$LATEST" ] && [ -z "$(git diff --name-only "$LATEST" "$HEAD" -- . ':(exclude)bucket/actionsmonitor.json')" ]; then
+            # Only the scoop manifest changed since last release. The post-release
+            # update-scoop job pushes that file to main, so without this guard the
+            # next Daily Build would self-perpetuate (bump → release → bump → ...).
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "Only scoop manifest changed since last release ($SHORT) — skipping"
           else
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             echo "short_sha=$SHORT" >> "$GITHUB_OUTPUT"
