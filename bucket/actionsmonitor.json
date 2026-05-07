@@ -1,10 +1,10 @@
 {
-  "version": "2026.05.06",
+  "version": "2026.05.07",
   "description": "Desktop monitor for GitHub Actions workflows and pull requests.",
   "homepage": "https://github.com/WizX20/ActionsMonitor",
   "license": "BUSL-1.1",
-  "url": "https://github.com/WizX20/ActionsMonitor/releases/download/v2026.05.06/ActionsMonitor.zip",
-  "hash": "85E649CA91FE4BA8DCE4E605959C33C993DCE7637BC2BD4FA82924F04E132D20",
+  "url": "https://github.com/WizX20/ActionsMonitor/releases/download/v2026.05.07/ActionsMonitor.zip",
+  "hash": "713720710B4A8568DE6D1DB876444B8E5B36F480D355E65BAEDDD894EFEE68BE",
   "bin": "ActionsMonitor.exe",
   "shortcuts": [
     [
