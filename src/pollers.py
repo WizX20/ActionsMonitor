@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import queue
 import re
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -50,35 +51,23 @@ if TYPE_CHECKING:  # avoid runtime import of main
 
 
 # ---------------------------------------------------------------------------
-# Status constants
+# Status constants — sourced from status.py (single source of truth) and
+# re-exported so existing `from pollers import ST_*` call sites keep working.
 # ---------------------------------------------------------------------------
+from status import (  # noqa: F401  (re-exported)
+    CONCLUSION_MAP,
+    ST_CANCELLED,
+    ST_FAILURE,
+    ST_QUEUED,
+    ST_RUNNING,
+    ST_SKIPPED,
+    ST_SUCCESS,
+    ST_UNKNOWN,
+    _resolve_status,
+    _STATUS_PRIORITY,
+)
+
 POLL_DEFAULT = 60  # seconds
-
-ST_UNKNOWN    = "unknown"
-ST_QUEUED     = "queued"
-ST_RUNNING    = "in_progress"
-ST_SUCCESS    = "success"
-ST_FAILURE    = "failure"
-ST_CANCELLED  = "cancelled"
-ST_SKIPPED    = "skipped"
-
-# Sort priority: higher = more urgent (used for status-based row sorting and
-# pollers' "representative run" picker).
-_STATUS_PRIORITY = {
-    ST_FAILURE: 4, ST_RUNNING: 3, ST_QUEUED: 2, ST_SUCCESS: 1,
-    ST_UNKNOWN: 0, ST_CANCELLED: 0, ST_SKIPPED: 0,
-}
-
-CONCLUSION_MAP = {
-    "success":          ST_SUCCESS,
-    "failure":          ST_FAILURE,
-    "timed_out":        ST_FAILURE,
-    "action_required":  ST_FAILURE,
-    "cancelled":        ST_CANCELLED,
-    "skipped":          ST_SKIPPED,
-    "neutral":          ST_SUCCESS,
-    None:               ST_RUNNING,
-}
 
 
 _NOTIF_DEFAULT_BY_MODE = {
@@ -102,17 +91,6 @@ def section_flags(cfg_entry: dict) -> dict:
         "notifications_enabled":  bool(cfg_entry.get(
             "notifications_enabled", _NOTIF_DEFAULT_BY_MODE.get(mode, True))),
     }
-
-
-def _resolve_status(api_status: str, conclusion: Optional[str]) -> str:
-    """Map GitHub API status/conclusion to an internal status constant."""
-    if api_status == "completed":
-        return CONCLUSION_MAP.get(conclusion, ST_UNKNOWN)
-    if api_status == "in_progress":
-        return ST_RUNNING
-    if api_status == "queued":
-        return ST_QUEUED
-    return ST_UNKNOWN
 
 
 # ---------------------------------------------------------------------------
@@ -585,7 +563,10 @@ class PRWorkflowPoller(WorkflowPoller):
         try:
             open_prs = self._fetch_user_open_prs(username, token)
             open_prs_ok = True
-        except Exception:
+        except Exception as e:
+            # Don't drop closed-PR filtering silently — surface so token/network
+            # issues are diagnosable. Other rows continue rendering.
+            print(f"[poller {self.wid}] open PRs fetch failed: {e}", file=sys.stderr)
             open_prs = []
         open_pr_branches = {pr["branch"] for pr in open_prs}
         user_pr_numbers = {pr["number"] for pr in open_prs}
@@ -603,8 +584,14 @@ class PRWorkflowPoller(WorkflowPoller):
                 try:
                     runs = self._fetch_branch_runs(wf_file, branch, token)
                     all_runs.extend(runs)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Permanent 404s (renamed workflow file) look identical to
+                    # transient timeouts here — emit so user can diagnose either.
+                    print(
+                        f"[poller {self.wid}] branch runs fetch failed "
+                        f"({wf_file} on {branch}): {e}",
+                        file=sys.stderr,
+                    )
             branches_with_runs.add(branch)
 
         # Drop runs for branches that no longer have an open PR
@@ -812,7 +799,10 @@ class PRWorkflowPoller(WorkflowPoller):
                 prev_rids   = self._prev_run_ids.get(sub_key, set())
                 prev_agg    = self._prev_statuses.get(sub_key)
 
-                if prev_rids and cur_run_ids != prev_rids and not cur_run_ids.issubset(prev_rids):
+                # Fire "new_run" only when a run ID we haven't seen appears.
+                # Pure shrinkage (GitHub GC'd an old run, no new one) must not
+                # notify — we'd spam the user every time GitHub prunes history.
+                if prev_rids and not cur_run_ids.issubset(prev_rids):
                     notif_type = "new_run"
                 elif prev_agg and prev_agg != agg_status:
                     if agg_status == ST_SUCCESS:

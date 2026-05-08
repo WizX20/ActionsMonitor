@@ -22,13 +22,14 @@ When running as a `.exe`, place `config.yaml` next to the executable (project ro
 
 ## Architecture
 
-Seven source files (one-way import direction — extracted modules never import from `main`):
+Eight source files (one-way import direction — extracted modules never import from `main`):
 
 - `src/main.py` — `ConfigManager`, `MainWindow`, `StartupManager`, monitor / window-state helpers, the dark stylesheet, `main()`. Wires `notifications.configure(...)` and `update.configure(...)` once at module init.
-- `src/icons.py` — all PIL icon rendering (Lucide glyphs, header / reviewer / snooze icons, WizX20 mark, app/tray base icon, `_pil_to_qpixmap` Qt bridge, plus the `_status_qpixmaps` / `_snooze_qpixmaps` / `_base_icon_cache` / `_wizx20_mark_cache` / `_REVIEWER_ICON_B64` caches). Self-contained: owns its own copies of `COLOUR_BG`, the seven status string literals, and the amber `_FG_LINK` default.
+- `src/status.py` — pure-data module (no PIL / Qt / requests): the seven `ST_*` literals, `CONCLUSION_MAP`, `_STATUS_PRIORITY`, and `_resolve_status`. Single source of truth — `pollers`, `icons`, and `widgets` all import from here.
+- `src/icons.py` — all PIL icon rendering (Lucide glyphs, header / reviewer / snooze icons, WizX20 mark, app/tray base icon, `_pil_to_qpixmap` Qt bridge, plus the `_status_qpixmaps` / `_snooze_qpixmaps` / `_base_icon_cache` / `_wizx20_mark_cache` / `_REVIEWER_ICON_B64` caches). Owns `_COLOUR_BG` (icon circle fills) and the amber `_FG_LINK` default; status literals come from `status.py`.
 - `src/gh_api.py` — GitHub API plumbing: HTTP layer (`_github_api_get`, `_github_graphql_post`), rate-limit gate (`RateLimited`, cooldown timestamps), ETag conditional-request cache, retry wrapper, URL parsers / builders (`parse_workflow_url`, `_build_workflow_url`, `_build_branch_url`, `parse_actor_url`), endpoint fetchers (`fetch_latest_run`, `fetch_pr_runs`, `fetch_actor_runs`, `fetch_github_username`), username cache + `reset_username_cache()` public hook, generic `_prune_cache` + `_PR_CACHE_MAX` / `_REVIEW_CACHE_MAX` caps, and the PR-review aggregation pipeline (`_compile_bot_regex`, `_aggregate_review_status`, `_cached_review_fetch`, `_cached_unresolved_fetch`). Self-contained: no imports from main.
 - `src/notifications.py` — `NotificationManager` + `NOTIF` singleton, `_PendingNotification`, `_NAMED_SOUNDS`, `_find_linux_default_sound`, `_ensure_focus_vbs`, plus `LINUX_MISSING` for the friendly missing-deps dialog. Imports `plyer` / `winotify` / `winsound` here (instead of `main`). Per-process paths (`APP_ICO`, `_FOCUS_VBS`, `_FOCUS_SIGNAL`) come in through `notifications.configure(app_name=..., app_ico=..., focus_vbs=..., focus_signal=...)`.
-- `src/pollers.py` — the four poller classes (`WorkflowPoller`, `PRWorkflowPoller`, `ActorWorkflowPoller`, `URLQueryPoller`), `WorkflowState` + `StatusEvent` dataclasses, status constants (`ST_*`, `CONCLUSION_MAP`, `_STATUS_PRIORITY`, `POLL_DEFAULT`), helpers (`_resolve_status`, `_deep_merge`, `parse_branch_prefix`, `extract_jira_key`, `parse_duration`, `_format_age`, `_worst_status`, `_combined_status`), and the snooze registry (`_snoozed_keys`, `_snoozed_lock`, `_is_snoozed`) with public `add_snooze` / `discard_snooze` / `clear_snooze` / `replace_snoozed` for MainWindow to mutate. `ConfigManager` is referenced via `TYPE_CHECKING` only to avoid the runtime-import circular trap.
+- `src/pollers.py` — the four poller classes (`WorkflowPoller`, `PRWorkflowPoller`, `ActorWorkflowPoller`, `URLQueryPoller`), `WorkflowState` + `StatusEvent` dataclasses, `POLL_DEFAULT`, helpers (`_deep_merge`, `parse_branch_prefix`, `extract_jira_key`, `parse_duration`, `_format_age`, `_worst_status`, `_combined_status`), and the snooze registry (`_snoozed_keys`, `_snoozed_lock`, `_is_snoozed`) with public `add_snooze` / `discard_snooze` / `clear_snooze` / `replace_snoozed` for MainWindow to mutate. Re-exports status constants (`ST_*`, `CONCLUSION_MAP`, `_STATUS_PRIORITY`, `_resolve_status`) from `status.py` for backward compat. `ConfigManager` is referenced via `TYPE_CHECKING` only to avoid the runtime-import circular trap.
 - `src/widgets.py` — `WorkflowRow`, `_ClickableLabel`, `_TitleLabel`, `_link_css`, `_make_badge`, the colour palette (`COLOUR`, `STATUS_LABEL`, `BG_*`, `FG_*`, `ACCENT`, `UI_FONT`), and the badge config dicts. Imports `pollers` for `WorkflowState` / status constants. main.py re-imports the colour constants from `widgets` so existing call sites keep working.
 - `src/update.py` — release check, download/extract/swap, restart helper, `UpdateChecker` + `UpdateDialog`, `_detect_install_source`, `_cleanup_stale_mei_dirs`. **Self-contained — no compile-time main imports** because PyInstaller re-executes the entry script as both `__main__` and `main`, so `from main import ...` triggers a circular reload. Instead `update.py` declares module-level placeholders and exposes `configure(...)` for one-shot injection of `APP_NAME`, `BUILD_COMMIT`, `IS_WINDOWS`, the theme colours, and `_ClickableLabel`. `main.py` calls `update.configure(...)` once during module init.
 
@@ -149,7 +150,7 @@ Lucide-inspired icons rendered with PIL at 4x supersampling + LANCZOS downscale.
 | Skipped | Skip-forward | `_draw_lucide_skip_forward` |
 | Unknown | Question mark | `_draw_lucide_circle_help` |
 
-`_init_status_icons()` generates `QPixmap` objects after `QApplication` exists, cached in `_status_qpixmaps` (both in `icons.py`). Adding a new status requires updating `main.py` (`COLOUR`, `STATUS_LABEL`, `CONCLUSION_MAP`, plus the `ST_*` constants) **and** `icons.py` (`_ST_*` literals, `_COLOUR_BG`, `_STATUS_ICON_FUNC`, the `_init_status_icons` tuple, and the matching `_draw_lucide_*` function).
+`_init_status_icons()` generates `QPixmap` objects after `QApplication` exists, cached in `_status_qpixmaps` (both in `icons.py`). Adding a new status requires updating `status.py` (`ST_*` literal, `CONCLUSION_MAP`, `_STATUS_PRIORITY`), `widgets.py` (`COLOUR`, `STATUS_LABEL`), and `icons.py` (`_COLOUR_BG`, `_STATUS_ICON_FUNC`, the `_init_status_icons` tuple, and the matching `_draw_lucide_*` function).
 
 ### App and tray icons
 
@@ -212,7 +213,7 @@ Two per-entry flags resolved by `pollers.section_flags(cfg_entry)` with mode-awa
 ### Shared helpers
 
 - `gh_api._gh_headers(token)` — builds standard GitHub API request headers (Accept, API version, optional Bearer token). All GitHub API calls use this.
-- `_resolve_status(api_status, conclusion)` — lives in `main.py`; maps GitHub API `status`/`conclusion` fields to internal status constants (`ST_SUCCESS`, `ST_FAILURE`, etc.) via `CONCLUSION_MAP`.
+- `status._resolve_status(api_status, conclusion)` — lives in `status.py`; maps GitHub API `status`/`conclusion` fields to internal status constants (`ST_SUCCESS`, `ST_FAILURE`, etc.) via `CONCLUSION_MAP`. Re-exported from `pollers` for backward compat.
 - `PRWorkflowPoller._cache_pr(pr_num, pr_data)` — updates the PR detail cache from any GitHub Pulls API response dict.
 
 ### GitHub username caching

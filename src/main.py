@@ -1927,10 +1927,12 @@ class MainWindow(QMainWindow):
                 if row:
                     row.set_snoozed(False)
 
-            self._states[key] = event.new_state
             row = self._rows.get(key)
             if row:
+                # Update widget before committing state so a failure here doesn't
+                # leave _states out of sync with what the UI is showing.
                 row.update(event.new_state, poll_rate, jira_base_url=jira_url)
+                self._states[key] = event.new_state
                 # Only re-sort when the active sort's backing field changed.
                 self._maybe_resort_section_for_wid(event.workflow_id, prev, event.new_state)
             elif event.sub_key is not None:
@@ -1947,6 +1949,7 @@ class MainWindow(QMainWindow):
                 if key in self._snoozed:
                     new_row.set_snoozed(True)
                 self._rows[key] = new_row
+                self._states[key] = event.new_state
                 # New row needs placement — unconditional resort.
                 self._resort_section_for_wid(event.workflow_id)
 

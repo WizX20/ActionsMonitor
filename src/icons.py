@@ -18,14 +18,16 @@ from PySide6.QtGui import QPixmap, QImage
 # Mirror of main.FG_LINK — duplicated here to keep this module dependency-free.
 _FG_LINK = "#FBBF24"
 
-# Status string constants — values must match main.ST_* literals.
-_ST_UNKNOWN   = "unknown"
-_ST_QUEUED    = "queued"
-_ST_RUNNING   = "in_progress"
-_ST_SUCCESS   = "success"
-_ST_FAILURE   = "failure"
-_ST_CANCELLED = "cancelled"
-_ST_SKIPPED   = "skipped"
+# Status string constants — sourced from status.py (single source of truth).
+from status import (
+    ST_CANCELLED as _ST_CANCELLED,
+    ST_FAILURE as _ST_FAILURE,
+    ST_QUEUED as _ST_QUEUED,
+    ST_RUNNING as _ST_RUNNING,
+    ST_SKIPPED as _ST_SKIPPED,
+    ST_SUCCESS as _ST_SUCCESS,
+    ST_UNKNOWN as _ST_UNKNOWN,
+)
 
 # Background fills for status icon circles (white glyph on top).
 _COLOUR_BG = {

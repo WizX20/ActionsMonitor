@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import re
+import sys
 import threading
 import time
 from typing import Optional
@@ -234,7 +235,8 @@ def _cached_unresolved_fetch(owner: str, repo: str, pr_number: int, token: str,
                              session: Optional[requests.Session],
                              cache: dict, key, ttl: float) -> int:
     """Fetch count of unresolved review threads for a PR with per-key TTL cache.
-    Returns stale value on API error, 0 when no prior value exists."""
+    Returns stale value on API error, 0 when no prior value exists.
+    Errors are printed to stderr so a malformed query / 401 isn't invisible."""
     cached = cache.get(key)
     if cached is not None:
         count, fetch_time = cached
@@ -252,7 +254,12 @@ def _cached_unresolved_fetch(owner: str, repo: str, pr_number: int, token: str,
         cache[key] = (count, time.monotonic())
         _prune_cache(cache, _REVIEW_CACHE_MAX)
         return count
-    except Exception:
+    except Exception as e:
+        print(
+            f"[gh_api] unresolved threads fetch failed for "
+            f"{owner}/{repo}#{pr_number}: {e}",
+            file=sys.stderr,
+        )
         return cached[0] if cached else 0
 
 
