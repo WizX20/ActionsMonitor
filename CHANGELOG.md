@@ -1,5 +1,9 @@
 # Changelog
 
+### 2026-05-08
+
+- **Per-section `include_in_tray_status` + `notifications_enabled` flags** — needed because URL mode surfaces PRs the user doesn't own (e.g. an "Open for Review" inbox); failures there shouldn't turn the tray red and shouldn't notify. Added `pollers.section_flags(cfg_entry)` returning both flags with mode-aware defaults: `include_in_tray_status=true` for every mode; `notifications_enabled=true` for branch/pr/actor, `false` for URL mode. `MainWindow._update_tray()` now filters out states from sections with `include_in_tray_status: false` before calling `_combined_status()`. `WorkflowPoller._fire_notification()` early-returns when the section flag is off, replacing URL mode's previous "never call `_fire_notification`" pattern with a single uniform gate. Documented under "Section flags" in `CLAUDE.md` and on the URL example in `config.template.yaml`.
+
 ### 2026-05-07
 
 - **URL mode now fetches CI status** — `URLQueryPoller` previously derived row status from review state only (approved → success, changes-requested → failure, else unknown), so the row icon always read "Unknown" while a build was actually green/red and the subtitle linked to the PR page instead of the latest run. Added `gh_api.fetch_runs_by_sha()` and a per-poller `_fetch_latest_run_for_sha()`; PR detail now caches `head_sha`, the poller fetches `/actions/runs?head_sha=<sha>&per_page=1` for each PR, and the resulting `run_id` / `run_url` / `run_number` / `started_at` / `run_updated_at` populate `WorkflowState`. Row status now comes from the CI run; the review badge still surfaces approval state separately. Side effect: URL-section CI failures now escalate the tray colour (previously muted by design).

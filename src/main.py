@@ -132,6 +132,7 @@ from pollers import (
     WorkflowState,
     _combined_status,
     _deep_merge,
+    section_flags,
     _STATUS_PRIORITY,
     ST_FAILURE,
     ST_SUCCESS,
@@ -1392,7 +1393,16 @@ class MainWindow(QMainWindow):
     def _update_tray(self):
         if not self._tray:
             return
-        unsnoozed = [s for k, s in self._states.items() if k not in self._snoozed]
+        # Sections with `include_in_tray_status: false` are excluded from the
+        # combined tray status (e.g. URL inboxes for other people's PRs).
+        excluded_wids = {
+            wid for wid, p in self._pollers.items()
+            if not section_flags(p.cfg_entry)["include_in_tray_status"]
+        }
+        unsnoozed = [
+            s for (wid, sk), s in self._states.items()
+            if (wid, sk) not in self._snoozed and wid not in excluded_wids
+        ]
         combined = _combined_status(unsnoozed)
         if combined == self._prev_tray_status:
             return

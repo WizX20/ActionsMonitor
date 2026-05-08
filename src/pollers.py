@@ -81,6 +81,29 @@ CONCLUSION_MAP = {
 }
 
 
+_NOTIF_DEFAULT_BY_MODE = {
+    "branch": True, "pr": True, "actor": True, "url": False,
+}
+
+
+def section_flags(cfg_entry: dict) -> dict:
+    """Resolve per-section flags with mode-aware defaults.
+
+    `include_in_tray_status` — when False, this section's rows do not feed the
+    tray icon's combined status. Default True for every mode.
+
+    `notifications_enabled` — when False, suppresses toast/sound for this
+    section. Default True for branch/pr/actor; False for url (URL mode rarely
+    surfaces PRs the user authored, so notifications would be noisy).
+    """
+    mode = cfg_entry.get("mode", "branch")
+    return {
+        "include_in_tray_status": bool(cfg_entry.get("include_in_tray_status", True)),
+        "notifications_enabled":  bool(cfg_entry.get(
+            "notifications_enabled", _NOTIF_DEFAULT_BY_MODE.get(mode, True))),
+    }
+
+
 def _resolve_status(api_status: str, conclusion: Optional[str]) -> str:
     """Map GitHub API status/conclusion to an internal status constant."""
     if api_status == "completed":
@@ -409,6 +432,10 @@ class WorkflowPoller(threading.Thread):
 
     def _fire_notification(self, notif_type: str, state: WorkflowState, global_notif: dict,
                            is_pr: bool = False, sub_key: Optional[str] = None):
+        # Per-section opt-out (e.g. URL mode default off, or any entry that sets
+        # notifications_enabled: false to silence a noisy section).
+        if not section_flags(self.cfg_entry)["notifications_enabled"]:
+            return
         # Suppress notifications for snoozed rows
         with _snoozed_lock:
             if (self.wid, sub_key) in _snoozed_keys:

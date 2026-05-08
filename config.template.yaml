@@ -233,9 +233,16 @@ workflows:
   # URL mode requires a GitHub token (the Search API is auth-gated at any
   # meaningful rate). Rate limit: 30 requests/minute authenticated.
   #
-  # Row status is derived from the review state (approved / changes-requested),
-  # not CI status. Draft, review, Jira and staleness badges behave the same as
-  # PR mode. Notifications are not emitted for URL-mode rows.
+  # Row status reflects the latest CI run on the PR's head commit. Draft,
+  # review, Jira and staleness badges behave the same as PR mode.
+  #
+  # Two flags shared with all modes — defaults differ for URL because it
+  # often surfaces PRs you don't own:
+  #   include_in_tray_status: true   # default true — set false to keep this
+  #                                  # section out of the tray icon's combined
+  #                                  # status (failures here won't turn it red)
+  #   notifications_enabled: false   # URL mode default; set true to enable
+  #                                  # toasts (branch/pr/actor default true)
   #
   # - mode: "url"
   #   name: "PRs - Needs My Review"         # Required: section title
@@ -243,6 +250,8 @@ workflows:
   #   polling_rate: 120                     # Optional: seconds (default: 60)
   #   max_results: 20                       # Optional: cap results (default: 20, max 100)
   #   stale_after: "5m"                     # Optional: remove rows missing for this long
+  #   include_in_tray_status: false         # Optional: exclude from tray status (default: true)
+  #   notifications_enabled: false          # Optional: toast on transitions (default: false in URL mode)
   #
   # Example — PRs you authored that have changes requested:
   # - mode: "url"

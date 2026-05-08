@@ -101,7 +101,7 @@ ActorWorkflowPoller._poll()   # actor mode
 - **Branch mode** (`mode: "branch"`, default) — one fixed row per workflow+branch combo. Uses `WorkflowPoller`.
 - **PR mode** (`mode: "pr"`) — one row per active PR the authenticated user authored. When a branch has multiple PRs (e.g. hotfix → acceptance and hotfix → production), each PR gets its own row. Uses `PRWorkflowPoller`. Rows are created dynamically and auto-removed after `pr_stale_after` (default `"5m"`). Shows a colour-escalating staleness badge based on `staleness_thresholds`.
 - **Actor mode** (`mode: "actor"`) — one row per recent workflow run by the authenticated user across all workflows in a repo. Uses `ActorWorkflowPoller`. Supports `filter: "failed"` to show only failed runs. Rows are created dynamically and auto-removed after `stale_after` (default `"5m"`).
-- **URL mode** (`mode: "url"`) — one row per PR returned by a GitHub Search API query (`query: "is:pr is:open review-requested:@me"`, etc.). Uses `URLQueryPoller`. Spans repos, so caches are keyed by `(owner, repo, pr_num)`. Row status reflects the latest CI run on the PR's head commit (fetched via `/actions/runs?head_sha=`), so the subtitle links to that run; review state is shown as a separate badge. No notifications. `@me` is substituted with the authenticated user's login. Sub-key format: `owner/repo#pr_num`.
+- **URL mode** (`mode: "url"`) — one row per PR returned by a GitHub Search API query (`query: "is:pr is:open review-requested:@me"`, etc.). Uses `URLQueryPoller`. Spans repos, so caches are keyed by `(owner, repo, pr_num)`. Row status reflects the latest CI run on the PR's head commit (fetched via `/actions/runs?head_sha=`), so the subtitle links to that run; review state is shown as a separate badge. Notifications default off and are gated by `notifications_enabled` (see Section flags). `@me` is substituted with the authenticated user's login. Sub-key format: `owner/repo#pr_num`.
 
 ### Key classes
 
@@ -201,6 +201,13 @@ PR-mode:     global[type] → global.pr[type] → per-workflow[type] → final
 ### Staleness thresholds
 
 Global `staleness_thresholds` config controls when PR-mode rows show a staleness badge based on the PR's `updated_at` field from the GitHub API. Three levels with escalating colours: `slightly_stale` (yellow), `moderately_stale` (orange), `very_stale` (red). Computed in `PRWorkflowPoller._poll()`, rendered as a badge in `WorkflowRow._update_labels()`.
+
+### Section flags
+
+Two per-entry flags resolved by `pollers.section_flags(cfg_entry)` with mode-aware defaults:
+
+- `include_in_tray_status` — default `true`. When `false`, the section's states are filtered out of `MainWindow._update_tray()`'s `_combined_status()` input so failures there don't escalate the tray icon. Useful for URL inboxes that surface other people's PRs.
+- `notifications_enabled` — default `true` for branch/pr/actor, `false` for url. Gated at the top of `WorkflowPoller._fire_notification` (early return). URL mode also doesn't track previous-state transitions, so even with the flag on it won't currently emit — the flag is the documented opt-in slot.
 
 ### Shared helpers
 
