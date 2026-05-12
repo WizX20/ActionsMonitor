@@ -521,6 +521,9 @@ class PRWorkflowPoller(WorkflowPoller):
         self._stale_after = parse_duration(cfg_entry.get("pr_stale_after", "5m"))
         # Extra workflow files to aggregate status from
         self._extra_wf_files: list[str] = list(cfg_entry.get("extra_workflows", []))
+        # Workflows to ignore — two independent sets keyed by basename of run path
+        self._ignored_status, self._ignored_notif = self._parse_ignore_workflows(
+            cfg_entry.get("ignore_workflows", []))
         # Per-branch tracking
         self._prev_run_ids:    dict[str, set[int]] = {}   # set of run IDs across all workflows
         self._prev_statuses:   dict[str, str] = {}        # aggregate status string
@@ -543,6 +546,33 @@ class PRWorkflowPoller(WorkflowPoller):
         self._branch_runs_ttl: float = 30.0
         # Parsed staleness thresholds (refreshed on each poll from config)
         self._staleness_thresholds: list[tuple[int, str]] = self._parse_staleness(config_mgr.get())
+
+    @staticmethod
+    def _parse_ignore_workflows(entries) -> tuple[set[str], set[str]]:
+        """Parse `ignore_workflows` into (ignored_status, ignored_notif) sets of
+        workflow filenames. Accepts:
+          - bare strings  → ignored for both status and notifications
+          - dicts with `file:` plus optional `status:` / `notifications:` (default true each)
+        """
+        ignored_status: set[str] = set()
+        ignored_notif:  set[str] = set()
+        for entry in entries or []:
+            if isinstance(entry, str):
+                ignored_status.add(entry)
+                ignored_notif.add(entry)
+            elif isinstance(entry, dict):
+                fname = entry.get("file") or entry.get("name")
+                if not fname:
+                    continue
+                if entry.get("status", True):
+                    ignored_status.add(fname)
+                if entry.get("notifications", True):
+                    ignored_notif.add(fname)
+        return ignored_status, ignored_notif
+
+    @staticmethod
+    def _wf_basename(run: dict) -> str:
+        return (run.get("path", "") or "").rsplit("/", 1)[-1]
 
     @staticmethod
     def _parse_staleness(cfg: dict) -> list[tuple[int, str]]:
@@ -732,13 +762,21 @@ class PRWorkflowPoller(WorkflowPoller):
                 active_sub_keys.add(sub_key)
                 self._last_seen[sub_key] = now
 
+                # Apply ignore filters: status_runs feed row status + representative run;
+                # notif_runs feed notification transition tracking. Either may be empty
+                # (e.g. PR only has ignored CI), which collapses to ST_UNKNOWN.
+                status_runs = [r for r in group_runs
+                               if self._wf_basename(r) not in self._ignored_status]
+                notif_runs  = [r for r in group_runs
+                               if self._wf_basename(r) not in self._ignored_notif]
+
                 # Snoozed rows: emit a minimal event (from already-fetched bulk data) so the
                 # row renders after restart, then skip per-PR extras (draft/review fetches)
                 # and notifications. Row stays in active_sub_keys so it isn't culled as stale.
                 if _is_snoozed(self.wid, sub_key):
                     run_statuses = [
                         _resolve_status(r.get("status"), r.get("conclusion"))
-                        for r in group_runs
+                        for r in status_runs
                     ]
                     agg_status = _worst_status(set(run_statuses)) if run_statuses else ST_UNKNOWN
                     snoozed_state = WorkflowState(
@@ -768,11 +806,12 @@ class PRWorkflowPoller(WorkflowPoller):
                     continue
 
                 # Determine per-run statuses and pick the aggregate + representative run
+                # (filtered: ignored-status workflows don't feed row colour or run link).
                 run_statuses: list[str] = []
                 representative_run: Optional[dict] = None
                 rep_priority = -1
 
-                for run in group_runs:
+                for run in status_runs:
                     api_status = run.get("status")
                     conclusion = run.get("conclusion")
                     st = _resolve_status(api_status, conclusion)
@@ -783,10 +822,11 @@ class PRWorkflowPoller(WorkflowPoller):
                         rep_priority = p
                         representative_run = run
 
-                if representative_run is None and group_runs:
-                    representative_run = group_runs[0]
+                if representative_run is None and status_runs:
+                    representative_run = status_runs[0]
 
-                # Aggregate status (worst wins). Empty runs = unknown (zero-CI drafts).
+                # Aggregate status (worst wins). Empty status_runs = unknown
+                # (zero-CI drafts, or PR with only ignored-status workflows).
                 agg_status = _worst_status(set(run_statuses)) if run_statuses else ST_UNKNOWN
 
                 state = WorkflowState(
@@ -844,9 +884,17 @@ class PRWorkflowPoller(WorkflowPoller):
                 # Jira ticket key from branch name
                 state.jira_key = extract_jira_key(branch_name)
 
-                # Determine notification based on aggregate status transitions
+                # Determine notification based on aggregate transitions of the
+                # notif-eligible runs only (ignored-notif workflows can't trigger
+                # toasts). Tracked aggregate may differ from displayed agg_status
+                # when status and notification ignore lists diverge.
                 notif_type: Optional[str] = None
-                cur_run_ids = {r.get("id") for r in group_runs}
+                cur_run_ids = {r.get("id") for r in notif_runs}
+                notif_statuses = [
+                    _resolve_status(r.get("status"), r.get("conclusion"))
+                    for r in notif_runs
+                ]
+                notif_agg = _worst_status(set(notif_statuses)) if notif_statuses else ST_UNKNOWN
                 prev_rids   = self._prev_run_ids.get(sub_key, set())
                 prev_agg    = self._prev_statuses.get(sub_key)
 
@@ -855,14 +903,14 @@ class PRWorkflowPoller(WorkflowPoller):
                 # notify — we'd spam the user every time GitHub prunes history.
                 if prev_rids and not cur_run_ids.issubset(prev_rids):
                     notif_type = "new_run"
-                elif prev_agg and prev_agg != agg_status:
-                    if agg_status == ST_SUCCESS:
+                elif prev_agg and prev_agg != notif_agg:
+                    if notif_agg == ST_SUCCESS:
                         notif_type = "success"
-                    elif agg_status == ST_FAILURE:
+                    elif notif_agg == ST_FAILURE:
                         notif_type = "failure"
 
                 self._prev_run_ids[sub_key]     = cur_run_ids
-                self._prev_statuses[sub_key]    = agg_status
+                self._prev_statuses[sub_key]    = notif_agg
 
                 self.event_queue.put(StatusEvent(self.wid, state, notif_type, sub_key=sub_key))
 
