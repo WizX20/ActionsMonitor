@@ -172,6 +172,16 @@ def _field_label(text: str) -> QLabel:
     return lbl
 
 
+def _mono_font() -> QFont:
+    """Monospace QFont built without the QFont(family) ctor — that PySide6
+    overload routes through a point-size of -1 internally and can emit
+    'QFont::setPointSize: Point size <= 0 (-1)' warnings."""
+    font = QFont()
+    font.setFamilies(["Consolas", "DejaVu Sans Mono", "monospace"])
+    font.setStyleHint(QFont.StyleHint.Monospace)
+    return font
+
+
 def _line_edit(value: str = "", mono: bool = False, width: int = 0) -> QLineEdit:
     e = QLineEdit(value)
     e.setStyleSheet(_MONO_INPUT_CSS if mono else _INPUT_CSS)
@@ -1018,9 +1028,7 @@ class SettingsDialog(QDialog):
         self._yaml_edit.setStyleSheet(
             f"QPlainTextEdit {{ background: #171412; border: 1px solid #292524; "
             f"border-radius: 8px; color: {FG_MUTED}; font-size: 11px; padding: 10px; }}")
-        mono = QFont("Consolas")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._yaml_edit.setFont(mono)
+        self._yaml_edit.setFont(_mono_font())
         self._yaml_edit.setMinimumHeight(340)
         lay.addWidget(self._yaml_edit, 1)
 
@@ -1247,9 +1255,7 @@ class WorkflowFormDialog(QDialog):
         self._preview.setStyleSheet(
             f"QPlainTextEdit {{ background: #171412; border: 1px solid #292524; "
             f"border-radius: 6px; color: {FG_MUTED}; font-size: 11px; padding: 8px; }}")
-        mono = QFont("Consolas")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._preview.setFont(mono)
+        self._preview.setFont(_mono_font())
         self._preview.setMinimumHeight(150)
         preview_col.addWidget(self._preview, 1)
         # Stretch factor 1: when the dialog is taller than the content, the
