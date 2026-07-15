@@ -174,6 +174,27 @@ notifications:
     sound: none
 ```
 
+### Beta features
+
+Features still in development ship behind opt-in flags in the `beta:` block of `config.yaml`. Everything is **off by default** — a regular install behaves exactly as before until you flip a switch.
+
+| Flag | What it enables |
+|------|-----------------|
+| `settings_ui` | The in-app **Settings** window: a gear button in the header and a "⚙ Settings" footer link for managing workflows, notifications, PR rules, and your GitHub token without hand-editing `config.yaml`. Changes are written back to `config.yaml` immediately (your comments are preserved). |
+
+**Enable:** open `config.yaml` (next to `ActionsMonitor.exe` for installed builds — the footer's "Open config ↗" link takes you there) and add:
+
+```yaml
+beta:
+  settings_ui: true
+```
+
+The app hot-reloads the config within a few seconds — no restart needed. **Disable:** set the flag to `false` (or remove the `beta:` block) and the app falls back to the stock UI, again without a restart.
+
+Running from source? `task run:beta` (or setting the `ACTIONS_MONITOR_BETA=settings_ui` environment variable) force-enables flags for that run only, leaving `config.yaml` untouched.
+
+Beta features may change or be promoted to default behaviour in later releases — check the [changelog](CHANGELOG.md) when updating.
+
 ### Status colours
 
 | Colour | Meaning |
