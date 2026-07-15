@@ -36,4 +36,5 @@ tasks:
     desc: Build the standalone Windows exe (PyInstaller onedir + zip)
     platforms: [windows]
     cmds:
-      - cmd /c src\build.bat
+      # Task's shell interpreter treats a lone backslash as an escape — keep it doubled.
+      - 'cmd /c src\\build.bat'
