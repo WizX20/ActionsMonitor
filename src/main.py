@@ -1720,13 +1720,17 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Section sorting
     # ------------------------------------------------------------------
+    # U+FE0E forces text (monochrome) presentation — bare ▲/▼ get hijacked
+    # by the colour-emoji font on Windows.
+    _ARROW_UP   = "▲︎"
+    _ARROW_DOWN = "▼︎"
     _SORT_MODES = [
-        ("Status ▲", "status_asc"),
-        ("Status ▼", "status_desc"),
-        ("Updated ▲", "updated_asc"),
-        ("Updated ▼", "updated_desc"),
-        ("Created ▲", "created_asc"),
-        ("Created ▼", "created_desc"),
+        (f"Status {_ARROW_UP}", "status_asc"),
+        (f"Status {_ARROW_DOWN}", "status_desc"),
+        (f"Updated {_ARROW_UP}", "updated_asc"),
+        (f"Updated {_ARROW_DOWN}", "updated_desc"),
+        (f"Created {_ARROW_UP}", "created_asc"),
+        (f"Created {_ARROW_DOWN}", "created_desc"),
     ]
 
     def _open_sort_menu(self, title: str):
@@ -1742,7 +1746,15 @@ class MainWindow(QMainWindow):
         clear = menu.addAction("Clear sort")
         clear.setEnabled(current is not None)
         clear.triggered.connect(lambda checked=False, t=title: self._clear_sort(t))
-        menu.popup(QCursor.pos())
+        # Anchor under the section's Sort label, right-aligned to it, instead
+        # of floating at the cursor (which can land outside the window edge).
+        anchor = self._sort_labels.get(title)
+        if anchor is not None:
+            pos = anchor.mapToGlobal(
+                QPoint(anchor.width() - menu.sizeHint().width(), anchor.height() + 2))
+            menu.popup(pos)
+        else:
+            menu.popup(QCursor.pos())
 
     def _set_sort(self, title: str, mode: Optional[str]):
         # Sorts are independent per section — changing one section's sort must
@@ -1794,7 +1806,7 @@ class MainWindow(QMainWindow):
             content_layout.addWidget(row)
 
     def _update_sort_labels(self):
-        _ARROWS = {"asc": "▲", "desc": "▼"}
+        _ARROWS = {"asc": self._ARROW_UP, "desc": self._ARROW_DOWN}
         for title, lbl in self._sort_labels.items():
             current = self._section_sort.get(title)
             if current:

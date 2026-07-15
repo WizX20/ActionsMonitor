@@ -75,7 +75,7 @@ def test_sort_menu_state(app_env):
     for ev in demo_events():
         app_env.push(win, ev)
     win._set_sort("Workflows", "status_asc")
-    assert win._sort_labels["Workflows"].text() == "Sort: Status ▲"
+    assert win._sort_labels["Workflows"].text() == f"Sort: Status {win._ARROW_UP}"
     # Persisted
     state = win._load_state()
     assert state["section_sort"]["Workflows"] == "status_asc"

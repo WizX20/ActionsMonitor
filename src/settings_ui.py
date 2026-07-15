@@ -32,9 +32,9 @@ try:
 except ImportError:
     _HAVE_RUAMEL = False
 
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFrame,
-    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
-    QScrollArea, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit,
+    QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 
@@ -277,7 +277,11 @@ class SettingsDialog(QDialog):
         self._config_mgr = config_mgr
         self.setWindowTitle(f"{APP_NAME} - Settings")
         self.setMinimumSize(780, 600)
-        self.setStyleSheet(f"QDialog {{ background: {BG_DARK}; }}")
+        # QLabel reset: the app-wide `QWidget { background-color }` rule would
+        # paint dark boxes behind labels sitting on card backgrounds.
+        self.setStyleSheet(
+            f"QDialog {{ background: {BG_DARK}; }} "
+            "QLabel { background: transparent; }")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -426,6 +430,7 @@ class SettingsDialog(QDialog):
         if not workflows:
             empty = QLabel("No workflows configured yet — add one above.")
             empty.setStyleSheet(f"color: {FG_FAINT}; font-size: 12px; padding: 12px;")
+            empty.setWordWrap(True)
             self._wf_list_lay.addWidget(empty)
             return
         for idx, entry in enumerate(workflows):
@@ -551,6 +556,22 @@ class SettingsDialog(QDialog):
 
         card, card_lay = _card()
         self._notif_controls: dict[str, tuple[QCheckBox, QComboBox]] = {}
+
+        # Column headers for the per-type controls
+        hdr_row = QHBoxLayout()
+        hdr_row.setSpacing(12)
+        hdr_row.addStretch()
+        sound_hdr = QLabel("Sound")
+        sound_hdr.setStyleSheet(f"color: {FG_FAINT}; font-size: 10px; font-weight: 600;")
+        sound_hdr.setFixedWidth(110)
+        hdr_row.addWidget(sound_hdr)
+        on_hdr = QLabel("Enabled")
+        on_hdr.setStyleSheet(f"color: {FG_FAINT}; font-size: 10px; font-weight: 600;")
+        on_hdr.setFixedWidth(48)
+        on_hdr.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        hdr_row.addWidget(on_hdr)
+        card_lay.addLayout(hdr_row)
+
         for i, (key, label, sub) in enumerate(self._NOTIF_TYPES):
             row = QHBoxLayout()
             row.setSpacing(12)
@@ -560,20 +581,31 @@ class SettingsDialog(QDialog):
             l1.setStyleSheet(f"color: {FG_TEXT}; font-size: 12px; background: transparent;")
             l2 = QLabel(sub)
             l2.setStyleSheet(f"color: {FG_FAINT}; font-size: 11px; background: transparent;")
+            l2.setWordWrap(True)
             text_col.addWidget(l1)
             text_col.addWidget(l2)
             row.addLayout(text_col, 1)
 
             combo = QComboBox()
             combo.setStyleSheet(_COMBO_CSS)
+            combo.setFixedWidth(110)
+            combo.setToolTip("Sound played with this notification")
             combo.addItems(sounds)
             cur = (notif.get(key) or {})
             combo.setCurrentText(str(cur.get("sound", "none")))
             row.addWidget(combo)
 
             cb = QCheckBox()
+            cb.setToolTip("Enable or disable this notification type")
             cb.setChecked(bool(cur.get("enabled", True)))
-            row.addWidget(cb)
+            # Fixed-width wrapper so the checkbox centres under the header
+            cb_wrap = QWidget()
+            cb_wrap.setStyleSheet("background: transparent;")
+            cb_wrap.setFixedWidth(48)
+            cb_wrap_lay = QHBoxLayout(cb_wrap)
+            cb_wrap_lay.setContentsMargins(0, 0, 0, 0)
+            cb_wrap_lay.addWidget(cb, 0, Qt.AlignmentFlag.AlignHCenter)
+            row.addWidget(cb_wrap)
 
             self._notif_controls[key] = (cb, combo)
             cb.toggled.connect(lambda _v, k=key: self._save_notif_type(k))
@@ -744,6 +776,7 @@ class SettingsDialog(QDialog):
         card_lay.addWidget(head)
         note = QLabel("Time since the PR was last updated. Accepts 30m, 12h, 1d, 2d12h…")
         note.setStyleSheet("color: #57534E; font-size: 11px; background: transparent;")
+        note.setWordWrap(True)
         card_lay.addWidget(note)
         self._stale_edits: dict[str, QLineEdit] = {}
         for key, label, bg, fg in self._STALE_LEVELS:
@@ -881,6 +914,7 @@ class SettingsDialog(QDialog):
             "3. Enable the top-level repo scope\n"
             "4. Paste it above — it is stored only in your local config.yaml")
         steps.setStyleSheet(f"color: {FG_FAINT}; font-size: 11px; background: transparent;")
+        steps.setWordWrap(True)
         card2_lay.addWidget(steps)
         open_tokens = _link_label("Open github.com/settings/tokens ↗",
                                   lambda: __import__("webbrowser").open(
@@ -1014,7 +1048,14 @@ class WorkflowFormDialog(QDialog):
         self.result_entry: Optional[dict] = None
         self.setWindowTitle("Edit workflow" if self._editing else "Add workflow")
         self.setMinimumSize(660, 620)
-        self.setStyleSheet(f"QDialog {{ background: {BG_DARK}; }}")
+        # Open tall enough that all fields + Cancel/Add are visible without
+        # scrolling, clamped to the available screen height.
+        screen = QApplication.primaryScreen()
+        avail_h = screen.availableGeometry().height() if screen else 900
+        self.resize(680, min(940, avail_h - 80))
+        self.setStyleSheet(
+            f"QDialog {{ background: {BG_DARK}; }} "
+            "QLabel { background: transparent; }")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
