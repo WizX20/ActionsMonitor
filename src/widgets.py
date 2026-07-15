@@ -339,11 +339,26 @@ class WorkflowRow(QWidget):
         self._apply_background()
         self._update_labels()
 
+    # The app-wide `QWidget { background-color: BG_DARK }` rule would paint
+    # dark patches behind the row's child containers (badge row, right column,
+    # spacer widgets) on top of the card fill — force descendants transparent.
+    # Widget-level styles (accent bar, badges, snooze hover) still win.
+    _CHILD_RESET = "WorkflowRow QWidget { background-color: transparent; }"
+
     def _apply_background(self):
         hover = self._bg if self._snoozed else BG_ROW_HOVER
         self.setStyleSheet(
             f"WorkflowRow {{ background-color: {self._bg}; border-radius: 6px; }} "
-            f"WorkflowRow:hover {{ background-color: {hover}; }}"
+            f"WorkflowRow:hover {{ background-color: {hover}; }} "
+            + self._CHILD_RESET
+        )
+
+    def paint_bg(self, colour: str):
+        """Temporarily flood the card with `colour` (blink-on-focus). Call
+        `_apply_background()` to restore the normal fill."""
+        self.setStyleSheet(
+            f"WorkflowRow {{ background-color: {colour}; border-radius: 6px; }} "
+            + self._CHILD_RESET
         )
 
     def _set_accent(self, colour: str):

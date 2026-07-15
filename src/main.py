@@ -2411,7 +2411,7 @@ class MainWindow(QMainWindow):
                 row._apply_background()  # restore
                 return
             color = self._BLINK_COLOR if remaining % 2 == 0 else row._bg
-            row.setStyleSheet(f"WorkflowRow {{ background-color: {color}; }}")
+            row.paint_bg(color)
         except RuntimeError:
             return
         QTimer.singleShot(self._BLINK_MS, lambda: self._blink_row(row, remaining - 1))
