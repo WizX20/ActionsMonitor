@@ -982,6 +982,27 @@ class StartupManager:
             return False
 
     @classmethod
+    def heal(cls):
+        """Rewrite a stale Run entry (frozen builds only).
+
+        The entry survives repo moves and source→exe migrations pointing at a
+        command that no longer exists — Windows startup then silently launches
+        nothing while the checkbox still shows enabled. If an entry exists and
+        differs from the current exe command, rewrite it.
+        """
+        if not IS_WINDOWS or not getattr(sys, "frozen", False):
+            return
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_REG_KEY) as key:
+                val, _ = winreg.QueryValueEx(key, _STARTUP_REG_NAME)
+        except FileNotFoundError:
+            return  # startup not enabled — nothing to heal
+        except Exception:
+            return
+        if val and val != cls._exe_cmd():
+            cls.enable()
+
+    @classmethod
     def enable(cls):
         if not IS_WINDOWS:
             return
@@ -2260,6 +2281,7 @@ def main():
 
     if IS_WINDOWS:
         _ensure_focus_vbs()
+        StartupManager.heal()
 
     app = QApplication(sys.argv)
     _generate_check_glyph(_CHECK_PNG)
