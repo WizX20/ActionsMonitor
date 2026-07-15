@@ -129,6 +129,18 @@ staleness_thresholds:
   very_stale: "5d"            # Red badge after 5 days
 
 # =============================================================================
+# Beta Features
+# =============================================================================
+# Opt-in switches for features still in development. All off by default.
+#
+#   settings_ui — in-app Settings window (gear icon in the header + footer
+#                 link) for managing workflows, notifications, and the GitHub
+#                 token without hand-editing this file.
+# =============================================================================
+beta:
+  settings_ui: false
+
+# =============================================================================
 # Workflows to Monitor
 # =============================================================================
 # Paste the URL of the GitHub Actions workflow page below.

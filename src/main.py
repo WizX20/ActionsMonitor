@@ -65,9 +65,11 @@ from icons import (
     _pil_to_qpixmap,
     _make_base_icon,
     _make_icon_image,
+    _make_status_icon,
     _make_refresh_icon,
     _make_update_icon,
     _make_help_icon,
+    _make_settings_icon,
     _reviewer_icon_b64,
     _init_snooze_icons,
     _init_status_icons,
@@ -135,6 +137,8 @@ from pollers import (
     section_flags,
     _STATUS_PRIORITY,
     ST_FAILURE,
+    ST_QUEUED,
+    ST_RUNNING,
     ST_SUCCESS,
     ST_UNKNOWN,
 )
@@ -142,12 +146,16 @@ from pollers import (
 from widgets import (
     ACCENT,
     BG_DARK,
+    BG_FOOTER,
     BG_ROW,
     BG_ROW_ALT,
+    BORDER,
     COLOUR,
+    FG_FAINT,
     FG_LINK,
     FG_MUTED,
     FG_TEXT,
+    FG_TITLE,
     UI_FONT,
     WorkflowRow,
     _ClickableLabel,
@@ -874,6 +882,10 @@ DEFAULT_CONFIG: dict = {
         "moderately_stale": "3d",
         "very_stale": "5d",
     },
+    # Beta feature switches — opt-in, all off by default.
+    "beta": {
+        "settings_ui": False,  # in-app Settings window (replaces hand-editing config.yaml)
+    },
     "workflows": [],
 }
 
@@ -1185,9 +1197,11 @@ class MainWindow(QMainWindow):
         # Reverse lookup: id(content_widget) → section title. Avoids O(n) scans in _apply_event.
         self._container_to_title: dict[int, str] = {}
         self._section_indicators: dict[str, QLabel] = {}
+        self._section_counts: dict[str, QLabel] = {}
+        self._empty_state: Optional[QWidget] = None
         self._collapsed: dict[str, bool] = {}
         self._section_sort: dict[str, Optional[str]] = {}
-        self._sort_labels: dict[str, dict[str, QLabel]] = {}
+        self._sort_labels: dict[str, QLabel] = {}
         # One-shot: state.json snoozes are only restored on first startup;
         # config reloads carry the in-memory snooze set across instead.
         self._snooze_restored = False
@@ -1242,82 +1256,116 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Header
+        # Header — 52px, hairline bottom border (design v2)
         header = QWidget()
-        header.setFixedHeight(54)
+        header.setFixedHeight(52)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(14, 0, 14, 0)
+        header_layout.setContentsMargins(16, 0, 10, 0)
+        header_layout.setSpacing(10)
 
-        # WizX20 logo — full bolt+wordmark at 40px in 54px header (~7px
-        # padding top/bottom so the bolt tips align with the title text)
+        # WizX20 logo — bolt+wordmark at 30px in the 52px header
         logo_data = base64.b64decode(_WIZX20_LOGO_B64)
         logo_img = Image.open(io.BytesIO(logo_data))
-        scale = 40 / logo_img.height
-        logo_img = logo_img.resize((round(logo_img.width * scale), 40), Image.LANCZOS)
+        scale = 30 / logo_img.height
+        logo_img = logo_img.resize((round(logo_img.width * scale), 30), Image.LANCZOS)
         logo_lbl = _ClickableLabel(url_fn=lambda: "https://github.com/WizX20")
         logo_lbl.setPixmap(_pil_to_qpixmap(logo_img))
         logo_lbl.setToolTip("github.com/WizX20")
         header_layout.addWidget(logo_lbl)
 
         title_lbl = QLabel(APP_NAME)
-        title_lbl.setStyleSheet(f"color: {FG_TEXT}; font-size: 15px;")
-        title_lbl.setContentsMargins(10, 0, 16, 0)
+        title_lbl.setStyleSheet(f"color: {FG_TITLE}; font-size: 14px; font-weight: 600;")
         header_layout.addWidget(title_lbl)
         header_layout.addStretch()
 
         def _mk_icon_btn(pm: QPixmap, tooltip: str, handler) -> QLabel:
+            # 30×30 hit area, 18px logical icon, rounded hover fill
             pm.setDevicePixelRatio(2.0)
             btn = QLabel()
             btn.setPixmap(pm)
+            btn.setFixedSize(30, 30)
+            btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(tooltip)
-            btn.setStyleSheet("background: transparent; padding: 0; margin: 0;")
+            btn.setStyleSheet(
+                "QLabel { background: transparent; border-radius: 6px; } "
+                "QLabel:hover { background: #292524; }")
             btn.mousePressEvent = lambda e: handler()
             return btn
 
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(2)
+
         help_btn = _mk_icon_btn(
-            _pil_to_qpixmap(_make_help_icon(48)),
+            _pil_to_qpixmap(_make_help_icon(36)),
             "Open README on GitHub",
             lambda: webbrowser.open(f"{UpdateChecker.REPO_URL}/blob/main/README.md"),
         )
-        header_layout.addWidget(help_btn)
-        header_layout.addSpacing(8)
+        btn_row.addWidget(help_btn)
 
         update_btn = _mk_icon_btn(
-            _pil_to_qpixmap(_make_update_icon(48)),
+            _pil_to_qpixmap(_make_update_icon(36)),
             "Check for updates",
             lambda: self._check_for_updates(manual=True),
         )
-        header_layout.addWidget(update_btn)
-        header_layout.addSpacing(8)
+        btn_row.addWidget(update_btn)
 
         refresh_btn = _mk_icon_btn(
-            _pil_to_qpixmap(_make_refresh_icon(48)),
+            _pil_to_qpixmap(_make_refresh_icon(36)),
             "Refresh all workflows",
             self._refresh_all,
         )
-        header_layout.addWidget(refresh_btn)
+        btn_row.addWidget(refresh_btn)
 
+        # Divider + settings — the settings button only shows with the
+        # `beta.settings_ui` flag on.
+        self._header_divider = QFrame()
+        self._header_divider.setFixedSize(1, 18)
+        self._header_divider.setStyleSheet(f"background-color: {BORDER};")
+        div_wrap = QHBoxLayout()
+        div_wrap.setContentsMargins(4, 0, 4, 0)
+        div_wrap.addWidget(self._header_divider)
+        btn_row.addLayout(div_wrap)
+
+        self._settings_btn = _mk_icon_btn(
+            _pil_to_qpixmap(_make_settings_icon(36)),
+            "Settings",
+            self._open_settings,
+        )
+        btn_row.addWidget(self._settings_btn)
+
+        header_layout.addLayout(btn_row)
         main_layout.addWidget(header)
 
         # Separator
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: #44403C;")
+        sep.setStyleSheet(f"background-color: {BORDER};")
         main_layout.addWidget(sep)
 
-        # Column headers
-        col_hdr = QWidget()
-        col_hdr_layout = QHBoxLayout(col_hdr)
-        col_hdr_layout.setContentsMargins(14, 6, 14, 2)
-        lbl_status = QLabel("STATUS / WORKFLOW")
-        lbl_status.setStyleSheet(f"color: {FG_MUTED}; font-size: 9px; font-weight: bold;")
-        col_hdr_layout.addWidget(lbl_status, 1)
-        lbl_poll = QLabel("POLL")
-        lbl_poll.setStyleSheet(f"color: {FG_MUTED}; font-size: 9px; font-weight: bold;")
-        lbl_poll.setAlignment(Qt.AlignmentFlag.AlignRight)
-        col_hdr_layout.addWidget(lbl_poll)
-        main_layout.addWidget(col_hdr)
+        # Summary strip — worst-status dot + counts + last-updated time
+        summary = QWidget()
+        summary_layout = QHBoxLayout(summary)
+        summary_layout.setContentsMargins(16, 8, 16, 8)
+        summary_layout.setSpacing(8)
+        self._summary_dot = QLabel()
+        self._summary_dot.setFixedSize(8, 8)
+        self._summary_dot.setStyleSheet(
+            f"background-color: {COLOUR[ST_UNKNOWN]}; border-radius: 4px;")
+        summary_layout.addWidget(self._summary_dot)
+        self._summary_lbl = QLabel("Waiting for first poll…")
+        self._summary_lbl.setStyleSheet(f"color: {FG_TEXT}; font-size: 11px;")
+        summary_layout.addWidget(self._summary_lbl)
+        summary_layout.addStretch()
+        self._updated_lbl = QLabel("")
+        self._updated_lbl.setStyleSheet(f"color: {FG_FAINT}; font-size: 11px;")
+        summary_layout.addWidget(self._updated_lbl)
+        main_layout.addWidget(summary)
+
+        summary_sep = QFrame()
+        summary_sep.setFixedHeight(1)
+        summary_sep.setStyleSheet("background-color: #292524;")
+        main_layout.addWidget(summary_sep)
 
         # Scrollable list
         self._scroll_area = QScrollArea()
@@ -1325,28 +1373,27 @@ class MainWindow(QMainWindow):
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._scroll_content = QWidget()
         self._scroll_layout = QVBoxLayout(self._scroll_content)
-        self._scroll_layout.setContentsMargins(8, 0, 8, 8)
+        self._scroll_layout.setContentsMargins(10, 0, 10, 10)
         self._scroll_layout.setSpacing(0)
         self._scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._scroll_area.setWidget(self._scroll_content)
         main_layout.addWidget(self._scroll_area, 1)
 
-        # Footer
+        # Footer — single row: toggles left, settings/config link right (design v2)
         footer = QWidget()
-        footer.setStyleSheet(f"background-color: {ACCENT};")
+        footer.setStyleSheet(f"background-color: {BG_FOOTER};")
         footer_layout = QVBoxLayout(footer)
         footer_layout.setContentsMargins(0, 0, 0, 0)
         footer_layout.setSpacing(0)
 
         footer_sep = QFrame()
         footer_sep.setFixedHeight(1)
-        footer_sep.setStyleSheet("background-color: #44403C;")
+        footer_sep.setStyleSheet(f"background-color: {BORDER};")
         footer_layout.addWidget(footer_sep)
 
-        # Footer row 1 — checkboxes
         row1 = QWidget()
         row1_layout = QHBoxLayout(row1)
-        row1_layout.setContentsMargins(14, 14, 14, 6)
+        row1_layout.setContentsMargins(16, 10, 16, 10)
         row1_layout.setSpacing(18)
 
         state = self._load_state()
@@ -1357,7 +1404,8 @@ class MainWindow(QMainWindow):
             self._startup_cb.toggled.connect(self._toggle_startup)
             row1_layout.addWidget(self._startup_cb)
 
-        self._min_tray_cb = QCheckBox("Minimize to tray on close")
+        self._min_tray_cb = QCheckBox("Minimize to tray")
+        self._min_tray_cb.setToolTip("Minimize to tray on close")
         self._min_tray_cb.setChecked(state.get("minimize_to_tray", True))
         self._min_tray_cb.toggled.connect(self._toggle_minimize_to_tray)
         row1_layout.addWidget(self._min_tray_cb)
@@ -1368,23 +1416,82 @@ class MainWindow(QMainWindow):
         row1_layout.addWidget(self._aot_cb)
 
         row1_layout.addStretch()
+
+        # Settings link (beta) — falls back to the raw-config link otherwise
+        self._footer_settings_lbl = _ClickableLabel("⚙ Settings", url_fn=lambda: None)
+        self._footer_settings_lbl.setStyleSheet(
+            f"color: {FG_LINK}; font-size: 11px; font-weight: 600;")
+        self._footer_settings_lbl.mousePressEvent = lambda e: self._open_settings()
+        row1_layout.addWidget(self._footer_settings_lbl)
+
+        self._footer_config_lbl = _ClickableLabel("Open config ↗", url_fn=lambda: None)
+        self._footer_config_lbl.setStyleSheet(
+            f"color: {FG_LINK}; font-size: 11px; font-weight: bold;")
+        self._footer_config_lbl.mousePressEvent = lambda e: ConfigManager.open_in_editor()
+        row1_layout.addWidget(self._footer_config_lbl)
+
         footer_layout.addWidget(row1)
-
-        # Footer row 2 — config hint + link
-        row2 = QWidget()
-        row2_layout = QHBoxLayout(row2)
-        row2_layout.setContentsMargins(14, 6, 14, 10)
-        hint = QLabel("Edit config.yaml to add/change workflows.")
-        hint.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px;")
-        row2_layout.addWidget(hint)
-        row2_layout.addStretch()
-        open_btn = _ClickableLabel("Open config ↗", url_fn=lambda: None)
-        open_btn.setStyleSheet(f"color: {FG_LINK}; font-size: 11px; font-weight: bold;")
-        open_btn.mousePressEvent = lambda e: ConfigManager.open_in_editor()
-        row2_layout.addWidget(open_btn)
-        footer_layout.addWidget(row2)
-
         main_layout.addWidget(footer)
+
+        self._apply_beta_flags()
+
+    # ------------------------------------------------------------------
+    # Beta flags / settings entry points
+    # ------------------------------------------------------------------
+    def _settings_enabled(self) -> bool:
+        beta = self._config_mgr.get().get("beta") or {}
+        return bool(beta.get("settings_ui", False))
+
+    def _apply_beta_flags(self):
+        """Show/hide beta-gated UI. Safe to call again after config reloads."""
+        enabled = self._settings_enabled()
+        self._settings_btn.setVisible(enabled)
+        self._header_divider.setVisible(enabled)
+        self._footer_settings_lbl.setVisible(enabled)
+        self._footer_config_lbl.setVisible(not enabled)
+
+    def _open_settings(self):
+        if not self._settings_enabled():
+            ConfigManager.open_in_editor()
+            return
+        try:
+            from settings_ui import SettingsDialog
+        except ImportError:
+            ConfigManager.open_in_editor()
+            return
+        SettingsDialog(self._config_mgr, parent=self).exec()
+
+    # ------------------------------------------------------------------
+    # Summary strip
+    # ------------------------------------------------------------------
+    def _update_summary(self):
+        """Refresh the header summary strip: worst-status dot, counts, timestamp."""
+        excluded_wids = {
+            wid for wid, p in self._pollers.items()
+            if not section_flags(p.cfg_entry)["include_in_tray_status"]
+        }
+        states = [
+            s for (wid, sk), s in self._states.items()
+            if (wid, sk) not in self._snoozed and wid not in excluded_wids
+        ]
+        combined = _combined_status(states)
+        self._summary_dot.setStyleSheet(
+            f"background-color: {COLOUR.get(combined, COLOUR[ST_UNKNOWN])}; border-radius: 4px;")
+
+        failed  = sum(1 for s in states if s.status == ST_FAILURE)
+        running = sum(1 for s in states if s.status in (ST_RUNNING, ST_QUEUED))
+        passing = sum(1 for s in states if s.status == ST_SUCCESS)
+        if not states:
+            self._summary_lbl.setText("No workflows monitored")
+        else:
+            parts = []
+            if failed:
+                parts.append(f"{failed} failed")
+            if running:
+                parts.append(f"{running} running")
+            parts.append(f"{passing} passing")
+            self._summary_lbl.setText(" · ".join(parts))
+        self._updated_lbl.setText(f"Updated {datetime.now().strftime('%H:%M')}")
 
     # ------------------------------------------------------------------
     # System tray
@@ -1511,67 +1618,49 @@ class MainWindow(QMainWindow):
 
         is_collapsed = self._collapsed.get(title, False)
 
-        # Header
+        # Header — indicator, title, row count, hairline, inline sort control
         hdr = QWidget()
         hdr.setCursor(Qt.CursorShape.PointingHandCursor)
         hdr_layout = QHBoxLayout(hdr)
-        hdr_layout.setContentsMargins(12, 10, 0, 4)
+        hdr_layout.setContentsMargins(4, 10, 4, 6)
+        hdr_layout.setSpacing(8)
 
         indicator = QLabel("▸" if is_collapsed else "▾")
-        indicator.setStyleSheet(f"color: {FG_LINK}; font-size: 12px; font-weight: bold;")
+        indicator.setStyleSheet(f"color: {FG_LINK}; font-size: 10px;")
         hdr_layout.addWidget(indicator)
         self._section_indicators[title] = indicator
 
         title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(f"color: {FG_LINK}; font-size: 12px; font-weight: bold;")
+        title_lbl.setStyleSheet(f"color: {FG_LINK}; font-size: 12px; font-weight: 600;")
         hdr_layout.addWidget(title_lbl)
+
+        count_lbl = QLabel("")
+        count_lbl.setStyleSheet(f"color: {FG_FAINT}; font-size: 11px;")
+        hdr_layout.addWidget(count_lbl)
+        self._section_counts[title] = count_lbl
 
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: #44403C;")
+        sep.setStyleSheet(f"background-color: {BORDER};")
         sep.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         hdr_layout.addWidget(sep, 1)
+
+        sort_lbl = QLabel("Sort ▾")
+        sort_lbl.setStyleSheet(f"color: {FG_FAINT}; font-size: 11px;")
+        sort_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+        sort_lbl.mousePressEvent = lambda e, t=title: self._open_sort_menu(t)
+        hdr_layout.addWidget(sort_lbl)
+        self._sort_labels[title] = sort_lbl
 
         hdr.mousePressEvent = lambda e, t=title: self._toggle_section(t)
         section_layout.addWidget(hdr)
 
-        # Content container
+        # Content container — cards with a 3px gap (design v2)
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
+        content_layout.setSpacing(3)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        # Sort bar
-        sort_bar = QWidget()
-        sort_bar.setStyleSheet(f"background-color: {BG_ROW};")
-        sort_layout = QHBoxLayout(sort_bar)
-        sort_layout.setContentsMargins(4, 0, 4, 0)
-        sort_layout.setSpacing(0)
-
-        sort_lbl = QLabel("SORT:")
-        sort_lbl.setStyleSheet(f"color: {FG_TEXT}; font-size: 11px; font-weight: bold; padding: 3px 6px;")
-        sort_layout.addWidget(sort_lbl)
-
-        labels: dict[str, QLabel] = {}
-        for sk in ("status", "updated", "created"):
-            lbl = QLabel(f"{sk.capitalize()} ·")
-            lbl.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px; padding: 3px 6px;")
-            lbl.setCursor(Qt.CursorShape.PointingHandCursor)
-            lbl.mousePressEvent = lambda e, t=title, k=sk: self._cycle_sort(t, k)
-            sort_layout.addWidget(lbl)
-            labels[sk] = lbl
-        self._sort_labels[title] = labels
-
-        sort_layout.addStretch()
-
-        clear_lbl = QLabel("✕")
-        clear_lbl.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px; padding: 3px 8px;")
-        clear_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
-        clear_lbl.mousePressEvent = lambda e, t=title: self._clear_sort(t)
-        sort_layout.addWidget(clear_lbl)
-
-        content_layout.addWidget(sort_bar)
 
         content.setVisible(not is_collapsed)
         self._section_content[title] = content
@@ -1611,19 +1700,34 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Section sorting
     # ------------------------------------------------------------------
-    def _cycle_sort(self, title: str, sort_key: str):
-        current = self._section_sort.get(title)
-        prefix = f"{sort_key}_"
-        if current == f"{prefix}asc":
-            new_sort = f"{prefix}desc"
-        elif current == f"{prefix}desc":
-            new_sort = None
-        else:  # no sort yet, or a different column was active
-            new_sort = f"{prefix}asc"
+    _SORT_MODES = [
+        ("Status ▲", "status_asc"),
+        ("Status ▼", "status_desc"),
+        ("Updated ▲", "updated_asc"),
+        ("Updated ▼", "updated_desc"),
+        ("Created ▲", "created_asc"),
+        ("Created ▼", "created_desc"),
+    ]
 
+    def _open_sort_menu(self, title: str):
+        menu = QMenu(self)
+        current = self._section_sort.get(title)
+        for label, mode in self._SORT_MODES:
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(mode == current)
+            action.triggered.connect(
+                lambda checked=False, t=title, m=mode: self._set_sort(t, m))
+        menu.addSeparator()
+        clear = menu.addAction("Clear sort")
+        clear.setEnabled(current is not None)
+        clear.triggered.connect(lambda checked=False, t=title: self._clear_sort(t))
+        menu.popup(QCursor.pos())
+
+    def _set_sort(self, title: str, mode: Optional[str]):
         # Sorts are independent per section — changing one section's sort must
         # not clear or re-order any other section.
-        self._section_sort[title] = new_sort
+        self._section_sort[title] = mode
         self._update_sort_labels()
         self._sort_section(title)
         self._save_sort_state()
@@ -1663,28 +1767,23 @@ class MainWindow(QMainWindow):
         else:
             section_rows.sort(key=lambda kr: (kr[0][0], kr[0][1] or ""))
 
-        # Remove rows from layout (skip sort bar at index 0)
+        # Re-pack in sorted order (rows are uniform cards — no restriping)
         for _key, row in section_rows:
             content_layout.removeWidget(row)
-        # Re-add in sorted order
-        for i, (_key, row) in enumerate(section_rows):
+        for _key, row in section_rows:
             content_layout.addWidget(row)
-            bg = BG_ROW_ALT if i % 2 == 1 else BG_ROW
-            row._bg = bg
-            row._apply_background()
 
     def _update_sort_labels(self):
         _ARROWS = {"asc": "▲", "desc": "▼"}
-        for title, labels in self._sort_labels.items():
+        for title, lbl in self._sort_labels.items():
             current = self._section_sort.get(title)
-            for sk, lbl in labels.items():
-                if current and current.startswith(f"{sk}_"):
-                    direction = current.split("_", 1)[1]
-                    lbl.setText(f"{sk.capitalize()} {_ARROWS[direction]}")
-                    lbl.setStyleSheet(f"color: {FG_LINK}; font-size: 11px; padding: 3px 6px;")
-                else:
-                    lbl.setText(f"{sk.capitalize()} ·")
-                    lbl.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px; padding: 3px 6px;")
+            if current:
+                field, direction = current.rsplit("_", 1)
+                lbl.setText(f"Sort: {field.capitalize()} {_ARROWS[direction]}")
+                lbl.setStyleSheet(f"color: {FG_LINK}; font-size: 11px;")
+            else:
+                lbl.setText("Sort ▾")
+                lbl.setStyleSheet(f"color: {FG_FAINT}; font-size: 11px;")
 
     def _clear_sort(self, title: str):
         if not self._section_sort.get(title):
@@ -1784,7 +1883,74 @@ class MainWindow(QMainWindow):
         self._section_content_layout.clear()
         self._container_to_title.clear()
         self._section_indicators.clear()
+        self._section_counts.clear()
         self._sort_labels.clear()
+        if self._empty_state is not None:
+            self._empty_state.setParent(None)
+            self._empty_state.deleteLater()
+            self._empty_state = None
+
+    # ------------------------------------------------------------------
+    # Empty state (no workflows configured)
+    # ------------------------------------------------------------------
+    def _show_empty_state(self):
+        if self._empty_state is not None:
+            return
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(40, 56, 40, 56)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        icon_lbl = QLabel()
+        pm = _pil_to_qpixmap(_make_status_icon(ST_UNKNOWN, 36))
+        icon_lbl.setPixmap(pm)
+        effect = QGraphicsOpacityEffect(icon_lbl)
+        effect.setOpacity(0.6)
+        icon_lbl.setGraphicsEffect(effect)
+        layout.addWidget(icon_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        title = QLabel("No workflows configured yet")
+        title.setStyleSheet(f"color: {FG_TITLE}; font-size: 14px; font-weight: 600;")
+        layout.addWidget(title, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        body = QLabel(
+            "Add a workflow to start monitoring its runs. You can paste any "
+            "GitHub Actions URL — Actions Monitor detects the mode for you."
+            if self._settings_enabled() else
+            "Add a workflow to start monitoring its runs. Edit config.yaml "
+            "to add your first workflow entry.")
+        body.setStyleSheet(f"color: {FG_MUTED}; font-size: 12px;")
+        body.setWordWrap(True)
+        body.setMaximumWidth(320)
+        body.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(body, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        add_btn = QLabel("Add a workflow" if self._settings_enabled() else "Open config.yaml")
+        add_btn.setStyleSheet(
+            f"QLabel {{ background-color: {FG_LINK}; color: {BG_DARK}; font-size: 12px; "
+            f"font-weight: 600; padding: 7px 16px; border-radius: 6px; }} "
+            f"QLabel:hover {{ background-color: #F59E0B; }}")
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.mousePressEvent = lambda e: self._open_settings()
+        wrap = QHBoxLayout()
+        wrap.setContentsMargins(0, 8, 0, 0)
+        wrap.addStretch()
+        wrap.addWidget(add_btn)
+        wrap.addStretch()
+        layout.addLayout(wrap)
+
+        if self._settings_enabled():
+            edit_lbl = QLabel("or edit config.yaml directly ↗")
+            edit_lbl.setStyleSheet(
+                f"QLabel {{ color: {FG_FAINT}; font-size: 11px; }} "
+                f"QLabel:hover {{ color: {FG_LINK}; text-decoration: underline; }}")
+            edit_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+            edit_lbl.mousePressEvent = lambda e: ConfigManager.open_in_editor()
+            layout.addWidget(edit_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self._empty_state = panel
+        self._scroll_layout.addWidget(panel)
 
     # ------------------------------------------------------------------
     # Pollers
@@ -1854,6 +2020,11 @@ class MainWindow(QMainWindow):
         for wid, entry in enumerate(workflows):
             self._add_poller(wid, entry, cfg)
 
+        if not workflows:
+            self._show_empty_state()
+        self._update_summary()
+        self._update_section_counts()
+
     def _add_poller(self, wid: int, entry: dict, cfg: Optional[dict] = None):
         if wid in self._pollers:
             return
@@ -1882,11 +2053,10 @@ class MainWindow(QMainWindow):
             key = (wid, None)
             self._states[key] = state
 
-            alt = self._section_row_count(container) % 2 == 1
             jira_url = cfg.get("jira_base_url", "")
             content_layout = self._section_content_layout.get(
                 self._container_to_title.get(id(container), ""))
-            row = WorkflowRow(None, wid, state, alt, jira_base_url=jira_url,
+            row = WorkflowRow(None, wid, state, False, jira_base_url=jira_url,
                               sub_key=None, snooze_cb=self._show_row_ctx_menu)
             if content_layout:
                 content_layout.addWidget(row)
@@ -1979,7 +2149,6 @@ class MainWindow(QMainWindow):
                 row.deleteLater()
             self._states.pop(key, None)
             self._unsnooze(key)
-            self._restripe_rows()
             self._resort_section_for_wid(event.workflow_id)
         else:
             prev = self._states.get(key)
@@ -2006,8 +2175,7 @@ class MainWindow(QMainWindow):
                 container = self._wid_container.get(event.workflow_id, self._scroll_content)
                 content_layout = self._section_content_layout.get(
                     self._container_to_title.get(id(container), ""))
-                alt = self._section_row_count(container) % 2 == 1
-                new_row = WorkflowRow(None, event.workflow_id, event.new_state, alt,
+                new_row = WorkflowRow(None, event.workflow_id, event.new_state, False,
                                       jira_base_url=jira_url, sub_key=event.sub_key,
                                       snooze_cb=self._show_row_ctx_menu)
                 if content_layout:
@@ -2021,6 +2189,8 @@ class MainWindow(QMainWindow):
                 self._resort_section_for_wid(event.workflow_id)
 
         self._update_tray()
+        self._update_summary()
+        self._update_section_counts()
 
     def _show_row_ctx_menu(self, key: tuple[int, Optional[str]], event):
         if event is None:
@@ -2054,23 +2224,13 @@ class MainWindow(QMainWindow):
         if poller:
             poller.trigger_poll()
 
-    def _section_row_count(self, container: QWidget) -> int:
-        """Number of existing rows in a section — zebra striping is per section,
-        not global across all sections."""
-        return sum(1 for (wid, _sub) in self._rows
-                   if self._wid_container.get(wid) is container)
-
-    def _restripe_rows(self):
-        # Walk each section's layout in *visual* order — dict insertion order
-        # diverges from it whenever a section has an active sort.
-        for layout in self._section_content_layout.values():
-            i = 0
-            for j in range(layout.count()):
-                w = layout.itemAt(j).widget()
-                if isinstance(w, WorkflowRow):
-                    w._bg = BG_ROW_ALT if i % 2 == 1 else BG_ROW
-                    w._apply_background()
-                    i += 1
+    def _update_section_counts(self):
+        for title, content in self._section_content.items():
+            n = sum(1 for wid, _sub in self._rows
+                    if self._wid_container.get(wid) is content)
+            lbl = self._section_counts.get(title)
+            if lbl:
+                lbl.setText(str(n))
 
     # ------------------------------------------------------------------
     # Config hot-reload
@@ -2113,6 +2273,7 @@ class MainWindow(QMainWindow):
             key = (wid, sub_key)
             self._snoozed.add(key)
             pollers.add_snooze(wid, sub_key)
+        self._apply_beta_flags()
         self._start_pollers()
 
     # ------------------------------------------------------------------

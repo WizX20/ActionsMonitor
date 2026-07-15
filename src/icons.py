@@ -253,6 +253,32 @@ def _make_help_icon(size: int = 16, colour: str = _FG_LINK) -> Image.Image:
     draw.text((tx, ty), "?", fill=colour, font=font)
     return img.resize((size, size), Image.LANCZOS)
 
+def _make_settings_icon(size: int = 16, colour: str = _FG_LINK) -> Image.Image:
+    """Lucide settings icon: gear — 8 teeth around an outlined hub circle."""
+    img, draw, hi = _icon_base(size)
+    sw = max(3, round(hi / 16 * 2.2))
+    cx, cy = hi / 2, hi / 2
+    # Teeth: short thick radial strokes
+    tooth_inner = hi * 0.30
+    tooth_outer = hi * 0.46
+    for i in range(8):
+        angle = math.radians(i * 45 + 22.5)
+        x1 = cx + tooth_inner * math.cos(angle)
+        y1 = cy + tooth_inner * math.sin(angle)
+        x2 = cx + tooth_outer * math.cos(angle)
+        y2 = cy + tooth_outer * math.sin(angle)
+        draw.line([(x1, y1), (x2, y2)], fill=colour, width=sw + 2)
+    # Gear body ring
+    body_r = hi * 0.32
+    draw.ellipse([cx - body_r, cy - body_r, cx + body_r, cy + body_r],
+                 fill=None, outline=colour, width=sw)
+    # Hub
+    hub_r = hi * 0.13
+    draw.ellipse([cx - hub_r, cy - hub_r, cx + hub_r, cy + hub_r],
+                 outline=colour, width=sw)
+    return img.resize((size, size), Image.LANCZOS)
+
+
 # Reviewer icons (user / bot) — inline in review badges
 # ---------------------------------------------------------------------------
 # --- Reviewer icons (Lucide user + bot), rendered inline inside review badges ---
@@ -1191,7 +1217,7 @@ def _generate_check_glyph(path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Pre-generated status icon QPixmaps (populated once QApplication exists)
 _status_qpixmaps: dict[str, QPixmap] = {}
-_ICON_SIZE = 24  # px for row status icons
+_ICON_SIZE = 22  # px for row status icons (design v2)
 
 
 def _init_status_icons():
