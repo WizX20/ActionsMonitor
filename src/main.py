@@ -1059,6 +1059,14 @@ update.configure(
     clickable_label_cls=_ClickableLabel,
 )
 
+# Settings window (beta) — inject per-process paths/callables
+import settings_ui
+settings_ui.configure(
+    config_file=CONFIG_FILE,
+    open_in_editor=ConfigManager.open_in_editor,
+    app_name=APP_NAME,
+)
+
 # ---------------------------------------------------------------------------
 # Window state persistence
 # ---------------------------------------------------------------------------
