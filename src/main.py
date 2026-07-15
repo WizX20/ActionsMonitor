@@ -909,6 +909,18 @@ class ConfigManager:
                 raw = yaml.safe_load(fh) or {}
             # Deep-merge with defaults
             merged = _deep_merge(DEFAULT_CONFIG, raw)
+            # Env override: ACTIONS_MONITOR_BETA="settings_ui[,flag2...]"
+            # force-enables beta flags for this process without touching the
+            # user's config.yaml (used by `task run:beta`).
+            env_beta = os.environ.get("ACTIONS_MONITOR_BETA", "")
+            if env_beta:
+                # Copy first — merged["beta"] may still BE the nested dict
+                # inside DEFAULT_CONFIG (deep-merge shallow-copies one level).
+                beta = dict(merged.get("beta") or {})
+                for flag in env_beta.replace(";", ",").split(","):
+                    if flag.strip():
+                        beta[flag.strip()] = True
+                merged["beta"] = beta
             with self._lock:
                 self.data = merged
                 self._mtime = mtime

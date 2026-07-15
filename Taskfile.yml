@@ -21,6 +21,13 @@ tasks:
     cmds:
       - '{{.PY}} src/main.py'
 
+  run:beta:
+    desc: Run from source with beta features force-enabled (no config.yaml edit)
+    env:
+      ACTIONS_MONITOR_BETA: settings_ui
+    cmds:
+      - '{{.PY}} src/main.py'
+
   test:
     desc: Run the integration test suite (offscreen Qt, no network). Pass extra pytest args after --
     cmds:

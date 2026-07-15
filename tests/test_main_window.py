@@ -118,6 +118,13 @@ def test_beta_gating_on(app_env):
     assert not win._footer_config_lbl.isVisible()
 
 
+def test_beta_env_override(app_env, monkeypatch):
+    monkeypatch.setenv("ACTIONS_MONITOR_BETA", "settings_ui")
+    win = app_env.make_window(DEMO_CONFIG)  # config has no beta block
+    assert win._settings_btn.isVisible()
+    assert win._footer_settings_lbl.isVisible()
+
+
 def test_beta_gating_follows_config_reload(app_env):
     win = app_env.make_window(DEMO_CONFIG)
     assert not win._settings_btn.isVisible()

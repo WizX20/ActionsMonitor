@@ -136,6 +136,10 @@ staleness_thresholds:
 #   settings_ui — in-app Settings window (gear icon in the header + footer
 #                 link) for managing workflows, notifications, and the GitHub
 #                 token without hand-editing this file.
+#
+# Flags can also be force-enabled per run without editing this file via the
+# ACTIONS_MONITOR_BETA environment variable (comma-separated flag names),
+# e.g. `task run:beta` from a source checkout.
 # =============================================================================
 beta:
   settings_ui: false
