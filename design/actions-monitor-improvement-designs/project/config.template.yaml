@@ -1,0 +1,282 @@
+# =============================================================================
+# Actions Monitor - Configuration File
+# =============================================================================
+#
+# How to edit this file:
+#   - Use a plain text editor (Notepad, VS Code, etc.)
+#   - Indentation uses 2 spaces (do NOT use tabs)
+#   - Lines starting with '#' are comments and are ignored
+#   - After saving, the app will reload the config automatically
+#
+# =============================================================================
+
+# Optional: GitHub personal access token
+# Required for private repositories (the API returns a 404 without one).
+# Without a token you are limited to 60 API requests/hour (per IP).
+# With a token: 5000 requests/hour.
+#
+# Use a classic token. Fine-grained tokens have a precise "Actions: Read" scope, but
+# they require an org admin to allow them first — which may not be the case in your org.
+#
+# Classic tokens have no dedicated "read Actions" scope. The Actions API for private
+# repos falls under the broad 'repo' scope, which grants full repo access. This is more
+# than strictly needed, but the token still only acts on behalf of your own account.
+#
+#   1. Go to https://github.com/settings/tokens
+#   2. Click "Generate new token (classic)"
+#   3. Enable the top-level 'repo' scope
+#   4. Copy the generated token (starts with ghp_) and paste it below
+github_token: ""
+
+# Optional: Jira base URL
+# When set, Jira ticket IDs are extracted from branch names (e.g. EDU-1234)
+# and shown as clickable badges on PR and actor-mode rows.
+# jira_base_url: "https://mycompany.atlassian.net"
+
+# Optional: Regex used to classify PR reviewers as bots.
+#
+# The APPROVED and CHANGES REQUESTED review badges render a small icon
+# indicating whether the winning reviewer is a bot (robot glyph) or a
+# human (person glyph). A reviewer is a bot when their GitHub login
+# matches this regex. When a bot AND a human both contributed the winning
+# state, the human icon is shown (human wins).
+#
+# The default matches GitHub's canonical App suffix only, e.g.
+# "github-actions[bot]", "dependabot[bot]", "renovate[bot]". Override
+# this if your organisation uses bot accounts with a different naming
+# scheme — e.g. a plain username ending in "-bot", or a shared service
+# account. An invalid regex silently falls back to the default.
+#
+# Examples:
+#   bot_pattern: "\\[bot\\]$"              # default: strict GitHub App suffix
+#   bot_pattern: "(?i)(\\[bot\\]|-bot$)"   # also matches "deploy-bot", case-insensitive
+#   bot_pattern: "(?i)bot"                 # permissive: any login containing "bot"
+# bot_pattern: "\\[bot\\]$"
+
+# =============================================================================
+# Global Notification Settings
+# These apply to all workflows unless overridden per-workflow below.
+# =============================================================================
+notifications:
+  # Seconds to wait before sending notifications, allowing multiple to be
+  # combined into one toast + sound. Set to 0 to disable (immediate, old behavior).
+  batch_window: 1
+
+  # Suppress notifications older than this duration. Prevents a flood of stale
+  # notifications after waking from sleep. Use duration strings like "1h", "30m",
+  # "2h", etc. Set to 0 to disable (never suppress).
+  max_notification_age: "1h"
+
+  # How long the toast notification stays visible before auto-dismissing.
+  # Accepted values: "short" or "long".
+  #   Windows: native toast durations (~7s short, ~25s long).
+  #            Note: respects the OS "Show notifications for" accessibility
+  #            setting if the user has overridden it system-wide.
+  #   Linux:   ~5s short, ~15s long (passed to plyer's timeout).
+  duration: short
+
+  # Notify when a new workflow run starts
+  new_run:
+    enabled: true
+    # Sound options (named sounds play in sync with the notification flyout):
+    #   "whistle"        - short IM-style chime (default for new runs)
+    #   "default"        - Windows default notification sound
+    #   "reminder"       - reminder tone
+    #   "mail"           - mail notification sound
+    #   "sms"            - SMS notification sound
+    #   "none"           - no sound
+    #   "C:/path/to.wav" - path to a custom .wav file (plays independently)
+    #
+    # Linux: named sounds above are Windows-only presets; "default" plays a
+    # system sound via paplay/aplay. Custom paths should point to .oga/.wav
+    # files (e.g. "/usr/share/sounds/freedesktop/stereo/complete.oga").
+    sound: whistle
+
+  # Notify when a workflow run fails (conclusion: failure, timed_out, etc.)
+  failure:
+    enabled: true
+    sound: default
+
+  # Notify when a workflow run completes successfully
+  success:
+    enabled: true
+    sound: none
+
+  # ---------------------------------------------------------------------------
+  # PR-mode notification overrides (optional)
+  # These override the global defaults above, but only for PR-mode workflows.
+  # Per-workflow overrides still take priority over these.
+  # ---------------------------------------------------------------------------
+  # pr:
+  #   new_run:
+  #     sound: none
+  #   success:
+  #     enabled: false
+
+# =============================================================================
+# PR Staleness Thresholds
+# =============================================================================
+# Controls when PR-mode rows show a staleness badge based on time since last
+# update (from the GitHub PR API's updated_at field).
+#
+# Accepts human-friendly durations: "30m", "12h", "1d", "2d12h", etc.
+# Units: s = seconds, m = minutes, h = hours, d = days.
+# Plain integers are treated as seconds for backward compatibility.
+# =============================================================================
+staleness_thresholds:
+  slightly_stale: "1d"        # Yellow badge after 1 day
+  moderately_stale: "3d"      # Orange badge after 3 days
+  very_stale: "5d"            # Red badge after 5 days
+
+# =============================================================================
+# Workflows to Monitor
+# =============================================================================
+# Paste the URL of the GitHub Actions workflow page below.
+# The URL format is:
+#   https://github.com/{owner}/{repo}/actions/workflows/{file}.yml
+#
+# You can also include a branch filter in the URL query string, e.g.:
+#   ?query=branch%3Amain  or  ?query=branch%3Aacceptance
+# The app will extract the branch automatically from the URL.
+# =============================================================================
+workflows:
+  # ---------------------------------------------------------------------------
+  # Example: Branch mode (default) — one row per workflow+branch combo
+  # ---------------------------------------------------------------------------
+  # - url: https://github.com/owner/repository/actions/workflows/ci.yml
+  #   name: "CI Pipeline"         # Optional: display name (defaults to filename)
+  #   mode: "branch"              # Optional: "branch" (default) or "pr"
+  #   polling_rate: 60            # Optional: polling interval in seconds (default: 60)
+  #   branch: main                # Optional: only monitor runs on this branch
+  #   notifications:              # Optional: override global settings for this workflow
+  #     new_run:
+  #       enabled: false
+  #     failure:
+  #       enabled: true
+  #       sound: default
+  #     success:
+  #       enabled: false
+  #
+  # Example with a real URL (branch mode, acceptance branch):
+  # - url: https://github.com/your-org/your-repo/actions/workflows/acceptance-merge.yml?query=branch%3Aacceptance
+  #   name: "Acceptance Merge"
+  #   polling_rate: 30
+
+  # ---------------------------------------------------------------------------
+  # Example: PR mode — one row per active PR you authored
+  # ---------------------------------------------------------------------------
+  # - url: https://github.com/owner/repository/actions/workflows/ci.yml
+  #   name: "CI — My PRs"
+  #   mode: "pr"                  # Shows one row per PR branch you authored
+  #   polling_rate: 45
+  #   max_prs: 5                  # Max PR rows to show (default: 5)
+  #   pr_stale_after: "5m"        # Duration before removing a stale PR row (default: "5m")
+  #   extra_workflows:            # Optional: additional workflow files to aggregate status from
+  #     - integration-tests.yml   # Row shows worst-of status across all workflows
+  #     - e2e-tests.yml           # (failure > running > queued > success)
+  #   ignore_workflows:           # Optional: suppress noisy/small workflows that run on the PR
+  #     - small-check.yml         #   Short form: drop from BOTH row status and notifications
+  #     - file: noisy-lint.yml    #   Granular form: independently toggle the two switches
+  #       status: true            #     status: true        → exclude from row status (default true)
+  #       notifications: false    #     notifications: false → still notify on this workflow's transitions
+  #
+  # Example with a real URL (PR mode):
+  # - url: https://github.com/your-org/your-repo/actions/workflows/acceptance-pr.yml
+  #   name: "Acceptance/PR"
+  #   mode: "pr"
+  #   polling_rate: 45
+  #   max_prs: 5
+  #   pr_stale_after: "5m"
+  #   extra_workflows:
+  #     - integration-tests.yml
+  #     - lint.yml
+  #   ignore_workflows:
+  #     - shadow-it-check.yml
+
+  # ---------------------------------------------------------------------------
+  # Example: Actor mode — all your recent workflow runs across a repo
+  # ---------------------------------------------------------------------------
+  # - url: https://github.com/owner/repository/actions?query=actor%3Ausername
+  #   name: "My Runs"
+  #   mode: "actor"
+  #   polling_rate: 120
+  #   max_runs: 10              # Max rows to show (default: 10)
+  #   stale_after: "5m"          # Duration before removing a stale row (default: "5m")
+  #   filter: "all"             # "all" or "failed" — only show failed runs (default: "all")
+  #
+
+  # Example with a real URL (actor mode, failed only):
+  # - url: https://github.com/your-org/your-repo/actions?query=actor%3Ausername
+  #   name: "My Failed Runs"
+  #   mode: "actor"
+  #   filter: "failed"
+  #   polling_rate: 120
+
+  # ---------------------------------------------------------------------------
+  # Example: URL mode — one row per PR matching a GitHub Search query
+  # ---------------------------------------------------------------------------
+  # Runs an arbitrary GitHub pull-request search and renders each PR result as
+  # its own row. Lets you build custom "inboxes" (PRs needing review, PRs you
+  # authored across all repos, PRs with a given label, etc.) without tying to
+  # a single workflow file.
+  #
+  # Uses the GitHub Search API (/search/issues). Full filter syntax:
+  #   https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
+  #
+  # Common filters:
+  #   is:pr is:open                      # open PRs (always include this)
+  #   is:draft / -is:draft               # only drafts / non-drafts
+  #   review-requested:@me               # PRs requesting your review
+  #   review:approved / review:changes_requested
+  #   author:@me                         # PRs you authored
+  #   assignee:@me                       # PRs assigned to you
+  #   user:your-org                      # limit to an org
+  #   repo:your-org/your-repo            # limit to one repo
+  #   label:"priority:high"              # by label
+  #   updated:>2026-01-01                # activity window
+  #
+  # `@me` is auto-substituted with your authenticated GitHub login.
+  #
+  # URL mode requires a GitHub token (the Search API is auth-gated at any
+  # meaningful rate). Rate limit: 30 requests/minute authenticated.
+  #
+  # Row status reflects the latest CI run on the PR's head commit. Draft,
+  # review, Jira and staleness badges behave the same as PR mode.
+  #
+  # Two flags shared with all modes — defaults differ for URL because it
+  # often surfaces PRs you don't own:
+  #   include_in_tray_status: true   # default true — set false to keep this
+  #                                  # section out of the tray icon's combined
+  #                                  # status (failures here won't turn it red)
+  #   notifications_enabled: false   # URL mode default; set true to enable
+  #                                  # toasts (branch/pr/actor default true)
+  #
+  # - mode: "url"
+  #   name: "PRs - Needs My Review"         # Required: section title
+  #   query: "is:pr is:open review-requested:@me"
+  #   polling_rate: 120                     # Optional: seconds (default: 60)
+  #   max_results: 20                       # Optional: cap results (default: 20, max 100)
+  #   stale_after: "5m"                     # Optional: remove rows missing for this long
+  #   include_in_tray_status: false         # Optional: exclude from tray status (default: true)
+  #   notifications_enabled: false          # Optional: toast on transitions (default: false in URL mode)
+  #
+  # Example — PRs you authored that have changes requested:
+  # - mode: "url"
+  #   name: "My PRs - Changes Requested"
+  #   query: "is:pr is:open author:@me review:changes_requested"
+  #   polling_rate: 180
+  #
+  # Example — open PRs in a single repo ready for merge (approved, non-draft):
+  # - mode: "url"
+  #   name: "your-repo - Ready to Merge"
+  #   query: "is:pr is:open -is:draft review:approved repo:your-org/your-repo"
+  #   polling_rate: 120
+  #
+  # Example — open PRs in a repo that need review (skip drafts + your own PRs):
+  # Equivalent to the GitHub web URL:
+  #   https://github.com/your-org/your-repo/pulls?q=is%3Apr+is%3Aopen+draft%3Afalse+review%3Arequired+-author%3A%40me
+  # - mode: "url"
+  #   name: "your-repo - Open for Review"
+  #   query: "repo:your-org/your-repo is:pr is:open draft:false review:required -author:@me"
+  #   polling_rate: 120
+  # ---------------------------------------------------------------------------
