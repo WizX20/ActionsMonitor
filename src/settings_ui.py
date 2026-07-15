@@ -1250,9 +1250,12 @@ class WorkflowFormDialog(QDialog):
         mono = QFont("Consolas")
         mono.setStyleHint(QFont.StyleHint.Monospace)
         self._preview.setFont(mono)
-        self._preview.setFixedHeight(150)
-        preview_col.addWidget(self._preview)
-        lay.addLayout(preview_col)
+        self._preview.setMinimumHeight(150)
+        preview_col.addWidget(self._preview, 1)
+        # Stretch factor 1: when the dialog is taller than the content, the
+        # extra space grows the preview instead of being distributed as odd
+        # gaps between the fixed-height fields above.
+        lay.addLayout(preview_col, 1)
 
         # Actions
         actions = QHBoxLayout()

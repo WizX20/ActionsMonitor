@@ -2,6 +2,8 @@
 
 ### 2026-07-15
 
+- **Workflow form: no more dead space when resized taller** — extra vertical space used to be distributed as odd empty gaps between the fixed-height fields (the form layout had no stretch sink). The config.yaml preview now takes stretch factor 1 (min height 150), so resizing the dialog grows the preview and everything else stays snug.
+
 - **Settings: Edit crashed for quoted PR/URL entries** — clicking Edit on a workflow whose config values were quoted (`mode: "pr"`, `mode: "url"`) raised `yaml.representer.RepresenterError: cannot represent an object` from the form's YAML preview: ruamel's round-trip loader (`preserve_quotes=True`) returns `ScalarString` subclasses that `yaml.safe_dump` refuses, and the form re-inserted them into the rebuilt entry. New `to_plain()` recursively converts ruamel container/scalar types to plain Python; applied when an entry enters `WorkflowFormDialog` and defensively inside `entry_to_yaml()`. Regression test covers editing ruamel-loaded `pr` and `url` entries.
 
 - **Sort menu polish (user feedback)** — the ▲/▼ glyphs in the sort dropdown and active sort label carry U+FE0E (text presentation selector) so Windows renders them monochrome instead of hijacking them with the colour-emoji font, and the menu now pops up anchored under the section's Sort label (right-aligned) instead of floating at the cursor, which could land it detached beyond the window edge.
