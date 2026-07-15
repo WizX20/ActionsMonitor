@@ -18,6 +18,22 @@ pythonw src/main.py
 src\build.bat          # produces ActionsMonitor.exe in the project root
 ```
 
+## Testing
+
+Integration tests run the real Qt UI on the `offscreen` platform plugin — no display, no network (poller threads are prevented from starting; poll results are injected as `StatusEvent`s). A `task` runner (Taskfile.yml) wraps the repeatable commands:
+
+```bash
+task install-dev       # pip install runtime + test deps
+task test              # python -m pytest tests  (pass extra args after --)
+task screenshots       # regenerate UI screenshots into artifacts/screenshots/
+task run               # python src/main.py
+task build             # src\build.bat (Windows)
+```
+
+- `tests/conftest.py` — session `qapp` (dark stylesheet applied for production parity), `screenshot` fixture (saves `widget.grab()` PNGs to `artifacts/screenshots/`, gitignored), and `app_env` (per-test temp config/state paths patched into `main` + `settings_ui`, poller `start()` no-op'd, `make_window(config_text)` factory, `push(win, event)` queue-drain helper).
+- `tests/demo_data.py` — shared fake config + `StatusEvent` fixtures (branch success/failure rows, PR rows with badges).
+- Screenshot tests are named `test_screenshot_*` so `-k screenshot` selects them; they double as visual regression checks (fonts render as tofu boxes offscreen — layout/colours are what matters).
+
 When running as a `.exe`, place `config.yaml` next to the executable (project root).
 
 ## Architecture

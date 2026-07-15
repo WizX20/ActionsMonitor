@@ -22,6 +22,10 @@ _focus_signal
 # Generated checkbox glyph (PIL-rendered at startup for QSS indicator image)
 _check.png
 
+# Test/screenshot output (task test / task screenshots)
+artifacts/
+.pytest_cache/
+
 # PyInstaller build artifacts
 build/
 dist/

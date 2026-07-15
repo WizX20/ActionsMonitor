@@ -1,0 +1,39 @@
+# Task runner (https://taskfile.dev) — `task --list` for an overview.
+version: '3'
+
+vars:
+  PY: python
+
+tasks:
+  install:
+    desc: Install runtime dependencies
+    cmds:
+      - '{{.PY}} -m pip install -r src/requirements.txt'
+
+  install-dev:
+    desc: Install runtime + test dependencies
+    deps: [install]
+    cmds:
+      - '{{.PY}} -m pip install -r tests/requirements.txt'
+
+  run:
+    desc: Run the app from source (with console for debug output)
+    cmds:
+      - '{{.PY}} src/main.py'
+
+  test:
+    desc: Run the integration test suite (offscreen Qt, no network). Pass extra pytest args after --
+    cmds:
+      - '{{.PY}} -m pytest tests {{.CLI_ARGS | default "-v"}}'
+
+  screenshots:
+    desc: Regenerate UI screenshots into artifacts/screenshots/
+    cmds:
+      - '{{.PY}} -m pytest tests -q -k screenshot'
+      - 'echo "Screenshots written to artifacts/screenshots/"'
+
+  build:
+    desc: Build the standalone Windows exe (PyInstaller onedir + zip)
+    platforms: [windows]
+    cmds:
+      - cmd /c src\build.bat

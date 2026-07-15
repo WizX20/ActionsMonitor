@@ -167,6 +167,8 @@ def _card() -> tuple[QWidget, QVBoxLayout]:
 def _field_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px; font-weight: 600;")
+    # Long labels must wrap, not force the form wider than the dialog.
+    lbl.setWordWrap(True)
     return lbl
 
 
@@ -687,12 +689,8 @@ class SettingsDialog(QDialog):
         except ValueError:
             pass
         age = self._age_edit.text().strip()
-        if age:
-            try:
-                parse_duration(age)
-                notif["max_notification_age"] = age
-            except (ValueError, TypeError):
-                pass
+        if age and parse_duration(age) > 0:
+            notif["max_notification_age"] = age
         notif["duration"] = self._dur_combo.currentText()
         self._save(data)
 
@@ -819,13 +817,9 @@ class SettingsDialog(QDialog):
         thresholds = data.setdefault("staleness_thresholds", {})
         for key, edit in self._stale_edits.items():
             value = edit.text().strip()
-            if not value:
-                continue
-            try:
-                parse_duration(value)
-            except (ValueError, TypeError):
-                continue
-            thresholds[key] = value
+            # parse_duration returns 0 (not an exception) for garbage input
+            if value and parse_duration(value) > 0:
+                thresholds[key] = value
         self._save(data)
 
     def _save_rules_fields(self):
@@ -1019,7 +1013,7 @@ class WorkflowFormDialog(QDialog):
         entry = entry or {}
         self.result_entry: Optional[dict] = None
         self.setWindowTitle("Edit workflow" if self._editing else "Add workflow")
-        self.setMinimumSize(620, 620)
+        self.setMinimumSize(660, 620)
         self.setStyleSheet(f"QDialog {{ background: {BG_DARK}; }}")
 
         outer = QVBoxLayout(self)
@@ -1303,12 +1297,8 @@ class WorkflowFormDialog(QDialog):
             except ValueError:
                 pass
             stale = self._stale_edit.text().strip()
-            if stale:
-                try:
-                    parse_duration(stale)
-                    entry["pr_stale_after"] = stale
-                except (ValueError, TypeError):
-                    pass
+            if stale and parse_duration(stale) > 0:
+                entry["pr_stale_after"] = stale
             extra = [x.strip() for x in self._extra_edit.text().split(",") if x.strip()]
             if extra:
                 entry["extra_workflows"] = extra
