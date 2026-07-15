@@ -232,10 +232,29 @@ def extract_query(url: str) -> str:
     return ""
 
 
+def to_plain(obj):
+    """Recursively convert ruamel round-trip types (CommentedMap/Seq, quoted
+    ScalarString subclasses) to plain Python — yaml.safe_dump can't represent
+    them and the form must not leak them back into new entries."""
+    if isinstance(obj, dict):
+        return {str(k): to_plain(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [to_plain(v) for v in obj]
+    if isinstance(obj, bool) or obj is None:
+        return obj
+    if isinstance(obj, int):
+        return int(obj)
+    if isinstance(obj, float):
+        return float(obj)
+    if isinstance(obj, str):
+        return str(obj)
+    return obj
+
+
 def entry_to_yaml(entry: dict) -> str:
     """Render a single workflows[] entry as the YAML that will be appended."""
-    return yaml.safe_dump([entry], default_flow_style=False, sort_keys=False,
-                          allow_unicode=True)
+    return yaml.safe_dump([to_plain(entry)], default_flow_style=False,
+                          sort_keys=False, allow_unicode=True)
 
 
 def _entry_summary(entry: dict) -> str:
@@ -512,7 +531,9 @@ class SettingsDialog(QDialog):
         if idx is not None:
             workflows = self._raw().get("workflows") or []
             if idx < len(workflows):
-                entry = dict(workflows[idx])
+                # to_plain: ruamel scalar/container types crash the form's
+                # yaml.safe_dump preview and must not leak into new entries
+                entry = to_plain(workflows[idx])
         dlg = WorkflowFormDialog(entry, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.result_entry:
             data = self._raw()
@@ -1044,7 +1065,7 @@ class WorkflowFormDialog(QDialog):
     def __init__(self, entry: Optional[dict], parent=None):
         super().__init__(parent)
         self._editing = entry is not None
-        entry = entry or {}
+        entry = to_plain(entry or {})
         self.result_entry: Optional[dict] = None
         self.setWindowTitle("Edit workflow" if self._editing else "Add workflow")
         self.setMinimumSize(660, 620)

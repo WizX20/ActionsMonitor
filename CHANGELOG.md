@@ -2,6 +2,8 @@
 
 ### 2026-07-15
 
+- **Settings: Edit crashed for quoted PR/URL entries** — clicking Edit on a workflow whose config values were quoted (`mode: "pr"`, `mode: "url"`) raised `yaml.representer.RepresenterError: cannot represent an object` from the form's YAML preview: ruamel's round-trip loader (`preserve_quotes=True`) returns `ScalarString` subclasses that `yaml.safe_dump` refuses, and the form re-inserted them into the rebuilt entry. New `to_plain()` recursively converts ruamel container/scalar types to plain Python; applied when an entry enters `WorkflowFormDialog` and defensively inside `entry_to_yaml()`. Regression test covers editing ruamel-loaded `pr` and `url` entries.
+
 - **Sort menu polish (user feedback)** — the ▲/▼ glyphs in the sort dropdown and active sort label carry U+FE0E (text presentation selector) so Windows renders them monochrome instead of hijacking them with the colour-emoji font, and the menu now pops up anchored under the section's Sort label (right-aligned) instead of floating at the cursor, which could land it detached beyond the window edge.
 
 - **Settings polish (user feedback)** — notification-type rows gained "Sound" / "Enabled" column headers (plus tooltips on the dropdown/checkbox) so it's clear what each control does; labels inside cards no longer render dark background boxes (`QLabel { background: transparent }` reset at dialog level, same root cause as the row-card patches); long labels (staleness note, token how-to steps, notification subtitles, empty-list hint) now word-wrap instead of forcing pages wider than the dialog; the add/edit-workflow dialog opens tall enough (up to 940px, clamped to screen height) that all fields plus Cancel / Add workflow are visible without scrolling.

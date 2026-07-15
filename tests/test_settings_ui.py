@@ -93,6 +93,29 @@ def test_form_url_paste_switches_to_search_mode(app_env, qapp):
     assert "url" not in entry
 
 
+def test_form_edit_with_ruamel_loaded_entry(app_env, qapp):
+    """Editing an entry loaded by ruamel (quoted scalars → ScalarString
+    subclasses) must not crash the YAML preview (regression: RepresenterError
+    'cannot represent an object' for mode: \"pr\" / \"url\" entries)."""
+    app_env.config_path.write_text(
+        'workflows:\n'
+        '  - url: https://github.com/o/r/actions/workflows/pr.yml\n'
+        '    name: "Acceptance/PR"\n'
+        '    mode: "pr"\n'
+        '    extra_workflows:\n'
+        '      - "lint.yml"\n'
+        '  - query: "is:pr is:open review-requested:@me"\n'
+        '    name: "Open for review"\n'
+        '    mode: "url"\n',
+        encoding="utf-8")
+    for idx in (0, 1):
+        entry = settings_ui.to_plain(load_raw_config()["workflows"][idx])
+        form = WorkflowFormDialog(entry)  # crashed here before the fix
+        built = form._build_entry()
+        assert type(built["mode"]) is str
+        assert "mode:" in form._preview.toPlainText()
+
+
 def test_form_requires_url(app_env, qapp):
     form = WorkflowFormDialog(None)
     assert form._build_entry() is None
