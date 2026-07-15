@@ -225,6 +225,7 @@ class WorkflowState:
     review_status: Optional[str] = None   # "approved" | "changes_requested" | "commented" | "pending" | None
     review_by_bot: bool = False           # True iff winning reviewer(s) all match bot regex
     pr_target:     Optional[str] = None   # target branch (e.g. "acceptance", "production")
+    target_url:    Optional[str] = None   # GitHub tree URL of the PR target branch
     jira_key:      Optional[str] = None
     staleness_level: Optional[str] = None  # "slightly_stale" | "moderately_stale" | "very_stale"
     pr_updated_at:   Optional[str] = None  # ISO 8601 from GitHub PR API
@@ -292,6 +293,15 @@ class WorkflowPoller(threading.Thread):
         """Determine notification type from a run state transition.
         Returns 'new_run', 'success', 'failure', or None."""
         if prev_run_id is not None and cur_run_id != prev_run_id:
+            # A run that appears already-completed (started AND finished between
+            # two polls) must fire its outcome, not a stale "started" toast —
+            # the completed transition below can never fire for it afterwards.
+            if cur_api_status == "completed":
+                if resolved_status == ST_SUCCESS:
+                    return "success"
+                if resolved_status == ST_FAILURE:
+                    return "failure"
+                return None  # cancelled/skipped arrivals: nothing actionable
             return "new_run"
         if (cur_run_id == prev_run_id
                 and cur_api_status == "completed"
@@ -338,8 +348,10 @@ class WorkflowPoller(threading.Thread):
 
     def run(self):
         while not self._stop_evt.is_set():
-            self._poll()
+            # Clear before polling: a refresh click landing mid-poll re-polls
+            # immediately instead of being swallowed by a post-poll clear.
             self._poll_now.clear()
+            self._poll()
             poll_rate = int(self.cfg_entry.get("polling_rate", POLL_DEFAULT))
             # Wake early if stop or poll_now is signalled
             deadline = time.monotonic() + poll_rate
@@ -409,7 +421,8 @@ class WorkflowPoller(threading.Thread):
             self._fire_notification(notif_type, state, notif_cfg)
 
     def _fire_notification(self, notif_type: str, state: WorkflowState, global_notif: dict,
-                           is_pr: bool = False, sub_key: Optional[str] = None):
+                           is_pr: bool = False, sub_key: Optional[str] = None,
+                           age_ts: Optional[str] = None):
         # Per-section opt-out (e.g. URL mode default off, or any entry that sets
         # notifications_enabled: false to silence a noisy section).
         if not section_flags(self.cfg_entry)["notifications_enabled"]:
@@ -421,8 +434,11 @@ class WorkflowPoller(threading.Thread):
         # Suppress stale notifications (e.g. after waking from sleep)
         max_age = parse_duration(global_notif.get("max_notification_age", "1h"))
         if max_age > 0:
+            # Prefer the triggering run's own timestamp when the caller supplies
+            # one (PR mode); fall back to the representative-run fields.
             # For new_run use started_at; for success/failure use run_updated_at (completion time)
-            ts = state.started_at if notif_type == "new_run" else (state.run_updated_at or state.started_at)
+            ts = age_ts or (state.started_at if notif_type == "new_run"
+                            else (state.run_updated_at or state.started_at))
             if ts:
                 try:
                     dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -595,6 +611,7 @@ class PRWorkflowPoller(WorkflowPoller):
             "title": pr_data.get("title", ""),
             "base_ref": pr_data.get("base", {}).get("ref", ""),
             "updated_at": pr_data.get("updated_at", ""),
+            "head_sha": (pr_data.get("head") or {}).get("sha", ""),
         }
         _prune_cache(self._pr_cache, _PR_CACHE_MAX)
 
@@ -656,12 +673,21 @@ class PRWorkflowPoller(WorkflowPoller):
         branch_to_open_prs: dict[str, list[dict]] = {}
         for pr in open_prs:
             branch_to_open_prs.setdefault(pr["branch"], []).append(pr)
-        for pr in open_prs:
-            branch = pr["branch"]
-            if branch in branches_with_runs:
-                continue
-            # Fetch latest runs for this branch across all configured workflows
+        # Per-branch fill-in: for every open-PR branch, fetch the latest run of
+        # each configured workflow the bulk actor-filtered fetch didn't surface
+        # (runs by other actors, or runs older than the recent window). Without
+        # this a branch whose only in-window run is e.g. a skipped E2E sibling
+        # renders that instead of its real CI status. Cheap: per_page=1 with
+        # 30s TTL cache on top of the ETag layer.
+        seen_wf_by_branch: dict[str, set[str]] = {}
+        for r in all_runs:
+            seen_wf_by_branch.setdefault(r.get("head_branch", ""), set()).add(
+                self._wf_basename(r))
+        for branch in branch_to_open_prs:
+            seen = seen_wf_by_branch.get(branch, set())
             for wf_file in all_wf_files:
+                if wf_file in seen:
+                    continue
                 try:
                     runs = self._fetch_branch_runs(wf_file, branch, token)
                     all_runs.extend(runs)
@@ -795,6 +821,8 @@ class PRWorkflowPoller(WorkflowPoller):
                     if pr_num is not None:
                         snoozed_state.pr_number = pr_num
                         snoozed_state.pr_target = pr_base_ref or ""
+                        snoozed_state.target_url = _build_branch_url(
+                            self.owner, self.repo, snoozed_state.pr_target)
                         snoozed_state.pr_url = (
                             f"https://github.com/{self.owner}/{self.repo}/pull/{pr_num}"
                         )
@@ -804,6 +832,19 @@ class PRWorkflowPoller(WorkflowPoller):
                     self.event_queue.put(
                         StatusEvent(self.wid, snoozed_state, sub_key=sub_key))
                     continue
+
+                # Fallback: no runs from the configured workflows at all (e.g.
+                # the PR targets a different base whose CI lives in another
+                # workflow file). Use the latest run on the PR head SHA so the
+                # row still reports real build status instead of grey Unknown.
+                if not group_runs and pr_num is not None:
+                    fb_run = self._fetch_head_sha_run(pr_num, token)
+                    if fb_run is not None:
+                        group_runs = [fb_run]
+                        status_runs = [r for r in group_runs
+                                       if self._wf_basename(r) not in self._ignored_status]
+                        notif_runs  = [r for r in group_runs
+                                       if self._wf_basename(r) not in self._ignored_notif]
 
                 # Determine per-run statuses and pick the aggregate + representative run
                 # (filtered: ignored-status workflows don't feed row colour or run link).
@@ -861,6 +902,7 @@ class PRWorkflowPoller(WorkflowPoller):
                     state.pr_title = cached.get("title")
                     if not state.pr_target:
                         state.pr_target = cached.get("base_ref", "")
+                    state.target_url = _build_branch_url(self.owner, self.repo, state.pr_target)
                     state.pr_url = f"https://github.com/{self.owner}/{self.repo}/pull/{pr_num}"
                     state.review_status, state.review_by_bot = self._fetch_pr_review_status(
                         pr_num, token, bot_regex)
@@ -901,8 +943,22 @@ class PRWorkflowPoller(WorkflowPoller):
                 # Fire "new_run" only when a run ID we haven't seen appears.
                 # Pure shrinkage (GitHub GC'd an old run, no new one) must not
                 # notify — we'd spam the user every time GitHub prunes history.
+                new_runs: list[dict] = []
                 if prev_rids and not cur_run_ids.issubset(prev_rids):
-                    notif_type = "new_run"
+                    new_ids = cur_run_ids - prev_rids
+                    new_runs = [r for r in notif_runs if r.get("id") in new_ids]
+                    if any(r.get("status") != "completed" for r in new_runs):
+                        notif_type = "new_run"
+                    else:
+                        # Runs that started AND finished between two polls must
+                        # fire their outcome — a "started" toast would be stale
+                        # and would consume the aggregate transition below.
+                        new_sts = {_resolve_status(r.get("status"), r.get("conclusion"))
+                                   for r in new_runs}
+                        if ST_FAILURE in new_sts:
+                            notif_type = "failure"
+                        elif ST_SUCCESS in new_sts:
+                            notif_type = "success"
                 elif prev_agg and prev_agg != notif_agg:
                     if notif_agg == ST_SUCCESS:
                         notif_type = "success"
@@ -915,7 +971,17 @@ class PRWorkflowPoller(WorkflowPoller):
                 self.event_queue.put(StatusEvent(self.wid, state, notif_type, sub_key=sub_key))
 
                 if notif_type:
-                    self._fire_notification(notif_type, state, notif_cfg, is_pr=True, sub_key=sub_key)
+                    # Age-gate on the run that triggered the notification, not the
+                    # representative run — an old failed sibling run must not
+                    # suppress a toast for a run that started just now.
+                    if notif_type == "new_run":
+                        event_ts = max((r.get("run_started_at") or r.get("created_at") or ""
+                                        for r in new_runs), default="") or None
+                    else:
+                        event_ts = max((r.get("updated_at") or "" for r in notif_runs),
+                                       default="") or None
+                    self._fire_notification(notif_type, state, notif_cfg, is_pr=True,
+                                            sub_key=sub_key, age_ts=event_ts)
 
         # Detect stale sub_keys
         for sk in list(self._last_seen.keys()):
@@ -933,13 +999,13 @@ class PRWorkflowPoller(WorkflowPoller):
 
     def _fetch_user_open_prs(self, username: str, token: str) -> list[dict]:
         """Fetch open PRs authored by the user. Returns list of {number, branch, base_ref}.
-        Uses the creator= API filter to avoid fetching all repo PRs, but re-checks
-        user.login client-side — GitHub's creator= filter is loose and occasionally
-        returns PRs authored by someone else (observed: foreign PRs leaking in)."""
+        The Pulls list endpoint has no author filter (`creator=` only exists on the
+        Issues API and is silently ignored here), so we fetch the 100 most recently
+        updated open PRs and filter by user.login client-side. In a repo with >100
+        open PRs the user's oldest-updated PRs can still fall outside the window."""
         url = (
             f"https://api.github.com/repos/{self.owner}/{self.repo}"
-            f"/pulls?state=open&sort=updated&direction=desc&per_page=50"
-            f"&creator={username}"
+            f"/pulls?state=open&sort=updated&direction=desc&per_page=100"
         )
         username_lc = username.lower()
         results = []
@@ -973,6 +1039,21 @@ class PRWorkflowPoller(WorkflowPoller):
         self._branch_runs_cache[key] = (runs, time.monotonic())
         _prune_cache(self._branch_runs_cache, 200)
         return runs
+
+    def _fetch_head_sha_run(self, pr_num: int, token: str) -> Optional[dict]:
+        """Latest CI run on a PR's head SHA — fallback for PRs whose checks run
+        outside the configured workflow files (e.g. production-target PRs).
+        The head SHA comes from the PR cache populated by _fetch_user_open_prs;
+        the ETag layer makes repeat polls free."""
+        head_sha = self._pr_cache.get(pr_num, {}).get("head_sha", "")
+        if not head_sha:
+            return None
+        try:
+            runs = fetch_runs_by_sha(self.owner, self.repo, head_sha, token,
+                                     per_page=1, session=self._session)
+        except Exception:
+            return None
+        return runs[0] if runs else None
 
     def _fetch_prs_for_branch(self, branch: str, token: str) -> list[dict]:
         """Fetch open PRs for a head branch. Returns list of {number, base_ref}."""
@@ -1332,6 +1413,8 @@ class URLQueryPoller(WorkflowPoller):
                 snoozed_state.pr_title = item.get("title") or None
                 snoozed_state.pr_url = item.get("html_url", "")
                 snoozed_state.pr_target = cached_detail.get("base_ref", "")
+                snoozed_state.target_url = _build_branch_url(
+                    owner, repo, snoozed_state.pr_target)
                 snoozed_state.is_draft = cached_detail.get(
                     "draft", bool(item.get("draft", False)))
                 if head_branch:
@@ -1378,6 +1461,7 @@ class URLQueryPoller(WorkflowPoller):
             state.pr_title      = item.get("title") or None
             state.pr_url        = item.get("html_url", "")
             state.pr_target     = (pr_detail or {}).get("base_ref", "")
+            state.target_url    = _build_branch_url(owner, repo, state.pr_target)
             state.is_draft      = (pr_detail or {}).get("draft", bool(item.get("draft", False)))
             state.review_status = review_status
             state.review_by_bot = review_by_bot
@@ -1476,12 +1560,11 @@ class URLQueryPoller(WorkflowPoller):
 # Status aggregation helpers (used by main / tray)
 # ---------------------------------------------------------------------------
 def _worst_status(statuses: set[str]) -> str:
-    """Return the highest-priority status from a set (failure > running > queued > success)."""
-    if ST_FAILURE  in statuses: return ST_FAILURE
-    if ST_RUNNING  in statuses: return ST_RUNNING
-    if ST_QUEUED   in statuses: return ST_QUEUED
-    if ST_SUCCESS  in statuses: return ST_SUCCESS
-    return ST_UNKNOWN
+    """Return the highest-priority status from a set
+    (failure > running > queued > cancelled > success > skipped > unknown)."""
+    if not statuses:
+        return ST_UNKNOWN
+    return max(statuses, key=lambda s: _STATUS_PRIORITY.get(s, 0))
 
 
 def _combined_status(states: list[WorkflowState]) -> str:

@@ -138,6 +138,10 @@ class WorkflowRow(QWidget):
         self._snoozed = False
         self._icon_opacity: Optional[QGraphicsOpacityEffect] = None
         self._bg = BG_ROW_ALT if alt else BG_ROW
+        # Qt only auto-enables styled backgrounds for exact-QWidget instances;
+        # without this the `WorkflowRow { background-color }` QSS (zebra
+        # striping, blink-on-focus) never paints on this subclass.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_right_click)
 
@@ -175,6 +179,9 @@ class WorkflowRow(QWidget):
 
         self._pr_title_lbl = _TitleLabel(
             url_fn=lambda: self._state.pr_url)
+        # PR titles are user-controlled text — never let QLabel auto-detect
+        # them as rich text (a title containing <table> etc. would be parsed).
+        self._pr_title_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._pr_title_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
         self._pr_title_lbl.setToolTip("Open PR on GitHub")
         self._pr_title_lbl.setMinimumWidth(0)
@@ -185,8 +192,9 @@ class WorkflowRow(QWidget):
 
         # Target label — PR-mode only; the `→ target` suffix links to the branch tree.
         self._target_lbl = _ClickableLabel(url_fn=self._target_url)
+        self._target_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._target_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
-        self._target_lbl.setToolTip("Open branch on GitHub")
+        self._target_lbl.setToolTip("Open target branch on GitHub")
         self._target_lbl.setMinimumWidth(0)
         self._target_lbl.setWordWrap(False)
         self._target_lbl.setVisible(False)
@@ -206,6 +214,7 @@ class WorkflowRow(QWidget):
         self._top_row.setSpacing(0)
 
         self._name_lbl = _TitleLabel(state.name, url_fn=self._name_url)
+        self._name_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._name_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
         self._name_lbl.setMinimumWidth(0)
         self._name_lbl.setWordWrap(True)
@@ -221,6 +230,7 @@ class WorkflowRow(QWidget):
         # the latest run; in branch/actor mode shows the branch and links
         # to the branch tree.
         self._branch_lbl = _ClickableLabel(url_fn=self._branch_url)
+        self._branch_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._branch_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
         self._branch_lbl.setToolTip("Open branch on GitHub")
         self._branch_lbl.setMinimumWidth(0)
@@ -275,6 +285,7 @@ class WorkflowRow(QWidget):
 
         # Status info line — clickable, opens the latest run instance.
         self._info_lbl = _ClickableLabel(url_fn=lambda: self._state.run_url or self._state.url)
+        self._info_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._info_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
         self._info_lbl.setToolTip("Open latest run on GitHub")
         self._info_lbl.setMinimumWidth(0)
@@ -334,7 +345,9 @@ class WorkflowRow(QWidget):
 
     def _target_url(self) -> Optional[str]:
         s = self._state
-        return s.branch_url or s.run_url or s.url
+        # The label displays the PR *target* branch — link there, not to the
+        # head branch (branch_url is always built from the head branch).
+        return s.target_url or s.branch_url or s.run_url or s.url
 
     def _on_right_click(self, pos):
         if self._snooze_cb:
@@ -378,6 +391,10 @@ class WorkflowRow(QWidget):
         else:
             self._accent.setStyleSheet(
                 f"background-color: {COLOUR.get(self._state.status, COLOUR[ST_UNKNOWN])};")
+            # Status may have changed while snoozed (update() skips the icon
+            # when snoozed) — refresh the pixmap so icon and accent agree.
+            self._icon_lbl.setPixmap(
+                _status_qpixmaps.get(self._state.status, _status_qpixmaps.get(ST_UNKNOWN)))
             self._info_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
             self._name_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
             self._poll_lbl.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px;")
@@ -462,7 +479,7 @@ class WorkflowRow(QWidget):
             if s.pr_number:
                 self._branch_lbl.setToolTip("Open latest run on GitHub")
                 if s.pr_target:
-                    self._target_lbl.setText(s.pr_target)
+                    self._target_lbl.setText(f"→ {s.pr_target}")
                     self._target_lbl.setVisible(True)
                 else:
                     self._target_lbl.setVisible(False)

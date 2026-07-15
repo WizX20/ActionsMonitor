@@ -74,13 +74,14 @@ WorkflowPoller._poll()        # branch mode (default)
 PRWorkflowPoller._poll()      # pr mode
   → fetch_github_username()     # cached GET /user
   → fetch_pr_runs() × N         # primary + extra_workflows
-  → _fetch_user_open_prs()      # GET /pulls?state=open&creator=... — discovers PRs with old/no runs
-  → _fetch_branch_runs() × M    # per-branch fetch for newly discovered PR branches
+  → _fetch_user_open_prs()      # GET /pulls?state=open (100 newest-updated, author-filtered client-side)
+  → _fetch_branch_runs() × M    # per-branch fill-in for each configured workflow the bulk fetch missed
+  → _fetch_head_sha_run()       # fallback: latest run on PR head SHA when no configured workflow has runs
   → filter out closed PRs       # drop runs for branches without an open PR
   → group by head_branch        # latest run per workflow file per branch
   → group by PR number          # one sub-group per unique PR (supports multiple PRs per branch)
   → _fetch_prs_for_branch()     # fallback: GET /pulls?head=... when runs lack PR data
-  → aggregate status (worst wins)  # failure > running > queued > success (per PR)
+  → aggregate status (worst wins)  # failure > running > queued > cancelled > success > skipped (per PR)
   → pick representative run     # highest-priority status run for display
   → _fetch_pr_draft()           # GET /pulls/{n} → caches draft + title + base_ref + updated_at (every poll)
   → _fetch_pr_review_status()   # GET /pulls/{n}/reviews → approved/changes_requested/pending (cached 120s)
@@ -123,7 +124,7 @@ ActorWorkflowPoller._poll()   # actor mode
 
 ### Section sorting
 
-Each section header has clickable Status/Updated/Created sort labels. `_section_sort[title]` stores the active sort mode (`"status_asc"`, `"updated_desc"`, etc. or `None`). Only one sort is active globally — `_cycle_sort()` clears all others before setting the new one. `_sort_section()` collects rows for a section, sorts them, and re-packs. `_STATUS_PRIORITY` (module-level) maps status constants to numeric priority. Sort state persists in `state.json` under `"section_sort"`. After row creation/removal, `_resort_section_for_wid()` triggers re-sort if the section has an active sort.
+Each section header has clickable Status/Updated/Created sort labels. `_section_sort[title]` stores the active sort mode (`"status_asc"`, `"updated_desc"`, etc. or `None`). Sorts are independent per section — `_cycle_sort()` only touches the clicked section. `_sort_section()` collects rows for a section, sorts them, and re-packs. `_STATUS_PRIORITY` (module-level) maps status constants to numeric priority. Sort state persists in `state.json` under `"section_sort"`. After row creation/removal, `_resort_section_for_wid()` triggers re-sort if the section has an active sort.
 
 ## Visual system
 
@@ -166,7 +167,7 @@ Tooltips use Qt's built-in `widget.setToolTip(text)`. Styled via QSS in `DARK_ST
 
 ### Tray icon colour precedence
 
-`_combined_status()` priority: failure > running > queued > success > unknown.
+`_combined_status()` priority (via `_STATUS_PRIORITY`): failure > running > queued > cancelled > success > skipped > unknown.
 
 ## Persistence
 

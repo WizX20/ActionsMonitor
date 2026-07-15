@@ -1167,6 +1167,9 @@ class MainWindow(QMainWindow):
         self._collapsed: dict[str, bool] = {}
         self._section_sort: dict[str, Optional[str]] = {}
         self._sort_labels: dict[str, dict[str, QLabel]] = {}
+        # One-shot: state.json snoozes are only restored on first startup;
+        # config reloads carry the in-memory snooze set across instead.
+        self._snooze_restored = False
 
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(400, 200)
@@ -1198,7 +1201,6 @@ class MainWindow(QMainWindow):
             lambda: self._toggle_snooze(self._ctx_menu_target) if self._ctx_menu_target else None)
 
         self._start_pollers()
-        self._restore_snoozed_state()
 
         # Timers
         self._drain_timer = QTimer(self)
@@ -1595,19 +1597,14 @@ class MainWindow(QMainWindow):
             new_sort = f"{prefix}desc"
         elif current == f"{prefix}desc":
             new_sort = None
-        elif current is None or not current.startswith(prefix):
+        else:  # no sort yet, or a different column was active
             new_sort = f"{prefix}asc"
-        else:
-            new_sort = None
 
-        prev_sorted_titles = [t for t, s in self._section_sort.items() if s is not None and t != title]
-        for t in self._section_sort:
-            self._section_sort[t] = None
+        # Sorts are independent per section — changing one section's sort must
+        # not clear or re-order any other section.
         self._section_sort[title] = new_sort
         self._update_sort_labels()
         self._sort_section(title)
-        for t in prev_sorted_titles:
-            self._sort_section(t)
         self._save_sort_state()
 
     def _sort_section(self, title: str):
@@ -1773,13 +1770,18 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     @staticmethod
     def _workflow_stable_key(entry: dict) -> str:
-        """Identifier stable across wid shifts. Used to persist per-row state."""
+        """Identifier stable across wid shifts. Used to persist per-row state.
+
+        Includes branch/filter/name so two entries sharing a url (same workflow
+        on two branches, same repo with different actor filters) don't collide
+        and swap each other's snoozes on restart."""
         mode = entry.get("mode", "branch")
         if mode == "url":
             ident = entry.get("query") or ""
         else:
             ident = entry.get("url") or ""
-        return f"{mode}:{ident}"
+        extras = ":".join(str(entry.get(k) or "") for k in ("branch", "filter", "name"))
+        return f"{mode}:{ident}:{extras}"
 
     def _start_pollers(self):
         cfg = self._config_mgr.get()
@@ -1793,20 +1795,36 @@ class MainWindow(QMainWindow):
             for wid, entry in enumerate(workflows)
         }
 
+        # Restore the snooze registry BEFORE any poller thread starts — a
+        # poller's first _poll() races the restore otherwise and emits one
+        # un-snoozed event (which used to force-unsnooze the row).
+        if not self._snooze_restored:
+            self._snooze_restored = True
+            self._restore_snoozed_state()
+
         branch_container = None
         _DEFAULT_SECTION_TITLES = {
             "pr":    "PR Workflows",
             "actor": "My Runs",
             "url":   "URL Search",
         }
+        used_titles: set[str] = set()
         for wid, entry in enumerate(workflows):
             mode = entry.get("mode", "branch")
             if mode in ("pr", "actor", "url"):
                 name = entry.get("name") or entry.get("url") or _DEFAULT_SECTION_TITLES.get(mode, "Section")
+                # Titles key all section bookkeeping — a duplicate would merge
+                # two sections' rows and corrupt collapse/sort state.
+                base, n = name, 2
+                while name in used_titles:
+                    name = f"{base} ({n})"
+                    n += 1
+                used_titles.add(name)
                 container = self._create_section(name)
             else:
                 if branch_container is None:
                     branch_container = self._create_section("Workflows")
+                    used_titles.add("Workflows")
                 container = branch_container
             self._wid_container[wid] = container
 
@@ -1843,7 +1861,7 @@ class MainWindow(QMainWindow):
             key = (wid, None)
             self._states[key] = state
 
-            alt = len(self._rows) % 2 == 1
+            alt = self._section_row_count(container) % 2 == 1
             jira_url = cfg.get("jira_base_url", "")
             content_layout = self._section_content_layout.get(
                 self._container_to_title.get(id(container), ""))
@@ -1853,6 +1871,8 @@ class MainWindow(QMainWindow):
                 content_layout.addWidget(row)
             poll_rate = int(entry.get("polling_rate", POLL_DEFAULT))
             row.update(state, poll_rate, jira_base_url=jira_url)
+            if key in self._snoozed:
+                row.set_snoozed(True)
             self._rows[key] = row
 
             poller = WorkflowPoller(wid, entry, self._config_mgr, self._event_queue)
@@ -1879,14 +1899,33 @@ class MainWindow(QMainWindow):
                     "Source installs: run `git pull` in the repo.",
                 )
             return
-        new_version = UpdateChecker.check()
-        if new_version:
-            UpdateDialog(new_version, parent=self).exec()
-        elif manual:
-            QMessageBox.information(
-                self, "Up to date",
-                f"You're on the latest version ({BUILD_COMMIT}).",
-            )
+        # The release check is a blocking HTTP call (up to 15s) — run it on a
+        # worker thread and poll for the result so the main window never
+        # freezes on a slow network. Qt objects are only touched back here on
+        # the main thread.
+        result: dict = {"done": False, "version": None}
+
+        def _worker():
+            try:
+                result["version"] = UpdateChecker.check()
+            finally:
+                result["done"] = True
+
+        def _poll_result():
+            if not result["done"]:
+                QTimer.singleShot(200, _poll_result)
+                return
+            new_version = result["version"]
+            if new_version:
+                UpdateDialog(new_version, parent=self).exec()
+            elif manual:
+                QMessageBox.information(
+                    self, "Up to date",
+                    f"You're on the latest version ({BUILD_COMMIT}).",
+                )
+
+        threading.Thread(target=_worker, daemon=True, name="update-check").start()
+        QTimer.singleShot(200, _poll_result)
 
     # ------------------------------------------------------------------
     # Queue drain
@@ -1901,6 +1940,10 @@ class MainWindow(QMainWindow):
         self._check_focus_signal()
 
     def _apply_event(self, event: StatusEvent):
+        # Stale event from a poller generation that no longer exists (config
+        # reload removed/reordered entries) — never apply it to the new UI.
+        if event.workflow_id not in self._wid_container:
+            return
         key = (event.workflow_id, event.sub_key)
         cfg = self._config_mgr.get()
         workflows = cfg.get("workflows") or []
@@ -1919,7 +1962,10 @@ class MainWindow(QMainWindow):
             self._resort_section_for_wid(event.workflow_id)
         else:
             prev = self._states.get(key)
+            # prev.run_id None means placeholder state (row created before its
+            # first poll) — the first real run must not force an unsnooze.
             if (key in self._snoozed and prev is not None
+                    and prev.run_id is not None
                     and event.new_state.run_id is not None
                     and event.new_state.run_id != prev.run_id):
                 self._unsnooze(key)
@@ -1939,7 +1985,7 @@ class MainWindow(QMainWindow):
                 container = self._wid_container.get(event.workflow_id, self._scroll_content)
                 content_layout = self._section_content_layout.get(
                     self._container_to_title.get(id(container), ""))
-                alt = len(self._rows) % 2 == 1
+                alt = self._section_row_count(container) % 2 == 1
                 new_row = WorkflowRow(None, event.workflow_id, event.new_state, alt,
                                       jira_base_url=jira_url, sub_key=event.sub_key,
                                       snooze_cb=self._show_row_ctx_menu)
@@ -1987,16 +2033,23 @@ class MainWindow(QMainWindow):
         if poller:
             poller.trigger_poll()
 
+    def _section_row_count(self, container: QWidget) -> int:
+        """Number of existing rows in a section — zebra striping is per section,
+        not global across all sections."""
+        return sum(1 for (wid, _sub) in self._rows
+                   if self._wid_container.get(wid) is container)
+
     def _restripe_rows(self):
-        section_rows: dict[int, list[WorkflowRow]] = {}
-        for (wid, _sub), row in self._rows.items():
-            cid = id(self._wid_container.get(wid, self._scroll_content))
-            section_rows.setdefault(cid, []).append(row)
-        for rows in section_rows.values():
-            for i, row in enumerate(rows):
-                bg = BG_ROW_ALT if i % 2 == 1 else BG_ROW
-                row._bg = bg
-                row._apply_background()
+        # Walk each section's layout in *visual* order — dict insertion order
+        # diverges from it whenever a section has an active sort.
+        for layout in self._section_content_layout.values():
+            i = 0
+            for j in range(layout.count()):
+                w = layout.itemAt(j).widget()
+                if isinstance(w, WorkflowRow):
+                    w._bg = BG_ROW_ALT if i % 2 == 1 else BG_ROW
+                    w._apply_background()
+                    i += 1
 
     # ------------------------------------------------------------------
     # Config hot-reload
@@ -2014,22 +2067,24 @@ class MainWindow(QMainWindow):
             if sk:
                 saved_by_stable.append((sk, sub_key))
         self._stop_all_pollers()
-        # Drain any in-flight events from the old pollers — they reference stale wids
-        # which would race with the new poller set and could cause KeyErrors.
-        try:
-            while True:
-                self._event_queue.get_nowait()
-        except queue.Empty:
-            pass
+        # stop() doesn't join — a poller mid-_poll can still emit an event
+        # seconds from now. Swap in a fresh queue so late events from the old
+        # generation land in a dead-letter queue instead of being applied
+        # against the new config's wids (ghost rows, poisoned tray status).
+        self._event_queue = queue.Queue()
         self._rows.clear()
         self._states.clear()
         self._snoozed.clear()
         pollers.clear_snooze()
         self._destroy_sections()
         gh_api.reset_username_cache()
-        self._start_pollers()
-        # Restore snooze state using new wid mapping
-        stable_to_wid = {sk: wid for wid, sk in self._wid_stable_keys.items()}
+        # Restore snooze state BEFORE the new pollers start so their first
+        # poll already respects it. Uses the new config's wid mapping.
+        new_workflows = self._config_mgr.get().get("workflows") or []
+        stable_to_wid = {
+            self._workflow_stable_key(entry): wid
+            for wid, entry in enumerate(new_workflows)
+        }
         for sk, sub_key in saved_by_stable:
             wid = stable_to_wid.get(sk)
             if wid is None:
@@ -2037,6 +2092,7 @@ class MainWindow(QMainWindow):
             key = (wid, sub_key)
             self._snoozed.add(key)
             pollers.add_snooze(wid, sub_key)
+        self._start_pollers()
 
     # ------------------------------------------------------------------
     # Window state persistence
@@ -2146,12 +2202,16 @@ class MainWindow(QMainWindow):
     _BLINK_MS = 150
 
     def _blink_row(self, row: WorkflowRow, remaining: int = _BLINK_STEPS):
-        if remaining <= 0:
-            row._bg = row._bg  # restore
-            row._apply_background()
+        # The row can be deleted mid-blink (stale-row removal, config reload) —
+        # touching the dead C++ object raises RuntimeError in the timer slot.
+        try:
+            if remaining <= 0:
+                row._apply_background()  # restore
+                return
+            color = self._BLINK_COLOR if remaining % 2 == 0 else row._bg
+            row.setStyleSheet(f"WorkflowRow {{ background-color: {color}; }}")
+        except RuntimeError:
             return
-        color = self._BLINK_COLOR if remaining % 2 == 0 else row._bg
-        row.setStyleSheet(f"WorkflowRow {{ background-color: {color}; }}")
         QTimer.singleShot(self._BLINK_MS, lambda: self._blink_row(row, remaining - 1))
 
     def _quit(self):

@@ -443,6 +443,12 @@ def _github_graphql_post(query: str, variables: dict, token: str,
     _track_remaining_header(resp)
 
     if "errors" in payload:
+        # GraphQL signals rate limits as HTTP 200 + errors[].type=RATE_LIMITED —
+        # trip the shared cooldown gate like the REST 429 path does.
+        if any((e or {}).get("type") == "RATE_LIMITED" for e in payload["errors"]):
+            wait = _parse_retry_after(resp)
+            _set_cooldown(wait, "GraphQL rate limited")
+            raise RateLimited(wait, "GraphQL rate limited")
         raise RuntimeError(f"GraphQL errors: {payload['errors']}")
     return payload.get("data") or {}
 
@@ -533,7 +539,9 @@ def fetch_actor_runs(
     api_url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs"
     params: dict = {"actor": actor, "per_page": per_page}
     if conclusion:
-        params["conclusion"] = conclusion
+        # The runs API filters conclusions through its `status` parameter
+        # (accepts values like "failure"); a `conclusion` param is ignored.
+        params["status"] = conclusion
     return _github_api_get(api_url, token, session, params).get("workflow_runs", [])
 
 
