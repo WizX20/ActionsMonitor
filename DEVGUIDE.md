@@ -71,17 +71,13 @@ Releases are driven by `.github/workflows/_release.yml`, called by `build.yml` (
 
 `.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It calls the same `_build.yml` reusable workflow, so PR builds use the identical PyInstaller pipeline as releases — Windows + Linux artifacts are attached to each run for download.
 
-#### Required status checks (branch protection)
+#### Branch rules (ruleset `main`)
 
-Configure on GitHub: **Settings → Branches → Branch protection rules → `main`**. Enable **Require status checks to pass before merging** and select:
-
-- `build / build-windows`
-- `build / build-linux`
-
-A PR with a failing CI run is then blocked from merging. Names appear in the picker after the first CI run lands; trigger one PR first if the list is empty.
+Managed on GitHub: **Settings → Rules → Rulesets → main**. Pull request required, `squash` the only merge method, required checks `build / build-windows` and `build / build-linux`, deletion and force-push blocked; bypass list: repository admin only. Nobody but the owner can push to `main`, and a PR cannot be squash-merged before CI is green. Check names appear in the ruleset picker after the first CI run lands.
 
 ### Required secrets
 
+- **`RELEASE_TOKEN`** — fine-grained PAT of the owner: resource owner `WizX20`, repository access `ActionsMonitor` (and `PSWorktree`, same secret name), permission **Contents: Read and write**, expiry one year at most (note the date). `main` only accepts pull requests and `GITHUB_TOKEN` cannot bypass a ruleset on a user-owned repository, so `update-scoop` pushes the manifest bump with this token (repository admin → bypass). Set it with `git gh secret set RELEASE_TOKEN -R WizX20/ActionsMonitor`; the job fails early with a clear message when it is missing. A push with this token also triggers CI on `main` for the bump commit — expected, one extra run per release.
 - **`WINGET_PAT`** — classic GitHub PAT with `public_repo` scope, issued from an account that maintains a fork of [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs). `wingetcreate` pushes the manifest update to that fork and opens a PR upstream.
 
 ### First-time winget bootstrap
