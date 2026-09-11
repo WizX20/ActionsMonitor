@@ -44,18 +44,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Block release when the latest completed CI run on main is not
-          # success. Weekly Build (cron) and Release (manual dispatch) both
-          # funnel through here, so this single gate covers both callers.
-          CONCLUSION=$(gh run list -w ci.yml -b main --status completed -L 1 --json conclusion -q '.[0].conclusion' 2>/dev/null || echo "")
-          if [ -z "$CONCLUSION" ]; then
-            echo "No completed CI run on main yet — allowing release through."
-          elif [ "$CONCLUSION" != "success" ]; then
-            echo "Latest CI run on main is '$CONCLUSION'. Refusing to release."
-            exit 1
-          else
-            echo "Latest CI run on main is success."
-          fi
+          # Block release unless the CI run of the exact commit being released
+          # is success. Weekly Build (cron) and Release (manual dispatch) both
+          # funnel through here, so this single gate covers both callers. It
+          # looks at HEAD's own run rather than "the latest completed run on
+          # main", which after quick successive merges can be a superseded,
+          # cancelled one; while HEAD's run is still going it waits (20 min max).
+          SHA=$(git rev-parse HEAD)
+          for attempt in $(seq 1 40); do
+            RUN=$(gh run list -w ci.yml -c "$SHA" -L 1 --json status,conclusion -q '.[0] | "\(.status)/\(.conclusion)"' 2>/dev/null || echo "")
+            case "$RUN" in
+              "") echo "No CI run for $SHA — allowing release through."; exit 0 ;;
+              completed/success) echo "CI for $SHA is success."; exit 0 ;;
+              completed/*) echo "CI for $SHA ended as '${RUN#completed/}'. Refusing to release."; exit 1 ;;
+              *) echo "CI for $SHA is $RUN — waiting..."; sleep 30 ;;
+            esac
+          done
+          echo "CI for $SHA did not finish in time. Refusing to release."
+          exit 1
 
       - name: Check for changes since last release
         id: check
