@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## GitHub account — always WizX20
+
+This repo is published under the **WizX20** account from a machine whose active `gh` account is a work account. Never run `gh auth switch`. Inside this clone:
+
+- `git push` / `git fetch` authenticate as WizX20 through the included [`.gitconfig`](.gitconfig) — activated once per clone with `task setup` (= `git config --local include.path ../.gitconfig`). Check with `git config user.name`: it must print `WizX20`.
+- Use **`git gh …`** (or `task gh -- …`) instead of `gh …` for PRs, releases, workflow runs and API calls. Plain `gh` acts as the wrong account.
+- Commits must be authored as `WizX20 <nerdsonwaves@outlook.com>`; if `git config user.email` shows anything else, run `task setup` before committing.
+- How it works: the GitHub CLI's git credential helper only serves the *active* account but honours `GH_TOKEN` first; the helper in `.gitconfig` fetches WizX20's token from the OS keyring at call time (`gh auth token --user WizX20`), so nothing is written to disk. Same mechanism as in [WizX20/PSWorktree](https://github.com/WizX20/PSWorktree).
+
 ## Running the app
 
 ```bash

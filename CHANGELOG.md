@@ -1,5 +1,9 @@
 # Changelog
 
+### 2026-09-11
+
+- **Releases are cut weekly** — the scheduled build now runs once, on Tuesday morning (06:00 UTC), instead of three times a day. A release is still only created when `main` changed since the previous one, so quiet weeks stay quiet; the manual Release workflow is unchanged.
+
 ### 2026-07-15
 
 - **Workflow form: no more dead space when resized taller** — extra vertical space used to be distributed as odd empty gaps between the fixed-height fields (the form layout had no stretch sink). The config.yaml preview now takes stretch factor 1 (min height 150), so resizing the dialog grows the preview and everything else stays snug.
