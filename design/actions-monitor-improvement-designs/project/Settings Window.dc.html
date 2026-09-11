@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html, body { margin: 0; padding: 0; background: #0E0C0B; }
+  a { color: #FBBF24; text-decoration: none; }
+  a:hover { color: #F59E0B; text-decoration: underline; }
+  input::placeholder, textarea::placeholder { color: #57534E; }
+</style>
+</helmet>
+<div style="display: flex; justify-content: center; padding: 40px; font-family: 'Segoe UI', 'DejaVu Sans', system-ui, sans-serif;" data-screen-label="Settings window">
+  <div style="width: 780px; height: 600px; background: #1C1917; color: #E7E5E4; display: flex; flex-direction: column; border: 1px solid #0A0908; border-radius: 8px; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+
+    <!-- Title bar -->
+    <div style="height: 48px; display: flex; align-items: center; padding: 0 12px 0 16px; gap: 10px; flex: none; border-bottom: 1px solid #33302D;">
+      <img src="assets/hdr-settings.png" style="width: 16px; height: 16px;">
+      <span style="color: #F5F5F4; font-size: 14px; font-weight: 600;">Settings</span>
+      <div style="flex: 1;"></div>
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #4ADE80;"></span>
+      <span style="color: #78716C; font-size: 11px;">Synced with config.yaml · hot-reload on</span>
+      <div style="width: 1px; height: 16px; background: #33302D; margin: 0 4px;"></div>
+      <span style="color: #A8A29E; font-size: 14px; cursor: pointer; padding: 4px 8px;" style-hover="color: #F5F5F4;">✕</span>
+    </div>
+
+    <div style="flex: 1; display: flex; min-height: 0;">
+
+      <!-- Left nav -->
+      <div style="width: 172px; flex: none; border-right: 1px solid #292524; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px;">
+        <sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="6">
+          <div style="{{ nav.style }}" onClick="{{ nav.onClick }}">{{ nav.label }}</div>
+        </sc-for>
+        <div style="flex: 1;"></div>
+        <div style="border-top: 1px solid #292524; margin: 8px 4px 4px 4px; padding-top: 10px;">
+          <span style="color: #78716C; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Open config.yaml ↗</span>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div style="flex: 1; overflow-y: auto; padding: 20px 24px 24px 24px; min-width: 0;">
+
+        <!-- ================= WORKFLOWS: LIST ================= -->
+        <sc-if value="{{ showWorkflowList }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="flex: 1;">
+                <div style="color: #F5F5F4; font-size: 15px; font-weight: 600;">Workflows</div>
+                <div style="color: #78716C; font-size: 11.5px; margin-top: 2px;">Everything you monitor. Changes are written to config.yaml immediately.</div>
+              </div>
+              <div onClick="{{ openAdd }}" style="background: #FBBF24; color: #1C1917; font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 6px; cursor: pointer; flex: none;" style-hover="background: #F59E0B;">+ Add workflow</div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <!-- branch mode entry -->
+              <div style="display: flex; align-items: center; gap: 12px; background: #262220; border-radius: 6px; padding: 12px 14px;" style-hover="background: #2C2825;">
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="color: #F5F5F4; font-size: 13px;">Acceptance Merge</span>
+                    <span style="background: #33302D; color: #A8A29E; font-size: 10px; font-weight: 600; letter-spacing: 0.4px; padding: 2px 6px; border-radius: 3px;">BRANCH</span>
+                  </div>
+                  <div style="color: #78716C; font-size: 11px; margin-top: 3px;">your-org/your-repo · acceptance-merge.yml · branch: acceptance</div>
+                </div>
+                <span style="color: #78716C; font-size: 11px; font-variant-numeric: tabular-nums;">30s</span>
+                <span style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Edit</span>
+                <span style="color: #78716C; font-size: 11px; cursor: pointer;" style-hover="color: #F87171; text-decoration: underline;">Remove</span>
+              </div>
+              <!-- pr mode entry -->
+              <div style="display: flex; align-items: center; gap: 12px; background: #262220; border-radius: 6px; padding: 12px 14px;" style-hover="background: #2C2825;">
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="color: #F5F5F4; font-size: 13px;">Acceptance/PR</span>
+                    <span style="background: #3D3530; color: #FBBF24; font-size: 10px; font-weight: 600; letter-spacing: 0.4px; padding: 2px 6px; border-radius: 3px;">PR</span>
+                    <span title="Has notification overrides" style="width: 6px; height: 6px; border-radius: 50%; background: #FBBF24;"></span>
+                  </div>
+                  <div style="color: #78716C; font-size: 11px; margin-top: 3px;">your-org/your-repo · acceptance-pr.yml · max 5 PRs · +2 extra workflows</div>
+                </div>
+                <span style="color: #78716C; font-size: 11px; font-variant-numeric: tabular-nums;">45s</span>
+                <span style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Edit</span>
+                <span style="color: #78716C; font-size: 11px; cursor: pointer;" style-hover="color: #F87171; text-decoration: underline;">Remove</span>
+              </div>
+              <!-- url mode entry -->
+              <div style="display: flex; align-items: center; gap: 12px; background: #262220; border-radius: 6px; padding: 12px 14px;" style-hover="background: #2C2825;">
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="color: #F5F5F4; font-size: 13px;">HippoCampus - Open for Review</span>
+                    <span style="background: #302830; color: #A78BFA; font-size: 10px; font-weight: 600; letter-spacing: 0.4px; padding: 2px 6px; border-radius: 3px;">URL</span>
+                  </div>
+                  <div style="color: #78716C; font-size: 11px; margin-top: 3px; font-family: Consolas, monospace;">is:pr is:open draft:false review:required -author:@me</div>
+                </div>
+                <span style="color: #78716C; font-size: 11px; font-variant-numeric: tabular-nums;">120s</span>
+                <span style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Edit</span>
+                <span style="color: #78716C; font-size: 11px; cursor: pointer;" style-hover="color: #F87171; text-decoration: underline;">Remove</span>
+              </div>
+            </div>
+            <div style="color: #57534E; font-size: 11px;">Tip: you can still edit config.yaml by hand — the app hot-reloads it and this list stays in sync.</div>
+          </div>
+        </sc-if>
+
+        <!-- ================= WORKFLOWS: ADD ================= -->
+        <sc-if value="{{ showAddForm }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span onClick="{{ backToList }}" style="color: #A8A29E; font-size: 12px; cursor: pointer;" style-hover="color: #FBBF24;">← Workflows</span>
+              <span style="color: #44403C; font-size: 12px;">/</span>
+              <span style="color: #F5F5F4; font-size: 15px; font-weight: 600;">Add workflow</span>
+            </div>
+
+            <!-- URL paste -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label style="color: #A8A29E; font-size: 11.5px; font-weight: 600;">GitHub URL</label>
+              <input type="text" value="https://github.com/your-org/your-repo/actions/workflows/acceptance-pr.yml" style="background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 9px 12px; outline: none; font-family: Consolas, monospace;" style-focus="border-color: #FBBF24;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: #4ADE80;"></span>
+                <span style="color: #78716C; font-size: 11px;">Workflow file detected — pick how to monitor it below. Paste an <span style="color: #A8A29E;">/actions?query=…</span> or search URL to auto-detect other modes.</span>
+              </div>
+            </div>
+
+            <!-- Mode segmented -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label style="color: #A8A29E; font-size: 11.5px; font-weight: 600;">Mode</label>
+              <div style="display: flex; background: #262220; border: 1px solid #3B3734; border-radius: 6px; padding: 3px; gap: 2px; align-self: flex-start;">
+                <span style="color: #A8A29E; font-size: 12px; padding: 5px 14px; border-radius: 4px; cursor: pointer;" style-hover="color: #E7E5E4;">Branch</span>
+                <span style="background: #3D3530; color: #FBBF24; font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 4px; cursor: pointer;">PR</span>
+                <span style="color: #A8A29E; font-size: 12px; padding: 5px 14px; border-radius: 4px; cursor: pointer;" style-hover="color: #E7E5E4;">Actor</span>
+                <span style="color: #A8A29E; font-size: 12px; padding: 5px 14px; border-radius: 4px; cursor: pointer;" style-hover="color: #E7E5E4;">Search URL</span>
+              </div>
+              <span style="color: #57534E; font-size: 11px;">PR mode shows one row per open pull request you authored on this workflow.</span>
+            </div>
+
+            <!-- Name + polling -->
+            <div style="display: flex; gap: 14px;">
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                <label style="color: #A8A29E; font-size: 11.5px; font-weight: 600;">Display name</label>
+                <input type="text" value="Acceptance/PR" style="background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 9px 12px; outline: none;" style-focus="border-color: #FBBF24;">
+              </div>
+              <div style="width: 150px; display: flex; flex-direction: column; gap: 6px;">
+                <label style="color: #A8A29E; font-size: 11.5px; font-weight: 600;">Polling rate</label>
+                <div style="display: flex; align-items: center; background: #262220; border: 1px solid #3B3734; border-radius: 6px;">
+                  <input type="text" value="45" style="background: transparent; border: none; color: #E7E5E4; font-size: 12px; padding: 9px 0 9px 12px; outline: none; width: 100%; font-variant-numeric: tabular-nums;">
+                  <span style="color: #78716C; font-size: 11px; padding: 0 12px;">sec</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- PR-mode options -->
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+              <span style="color: #E7E5E4; font-size: 12px; font-weight: 600;">PR-mode options</span>
+              <div style="display: flex; gap: 14px;">
+                <div style="width: 130px; display: flex; flex-direction: column; gap: 6px;">
+                  <label style="color: #A8A29E; font-size: 11px;">Max PR rows</label>
+                  <input type="text" value="5" style="background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none; font-variant-numeric: tabular-nums;">
+                </div>
+                <div style="width: 170px; display: flex; flex-direction: column; gap: 6px;">
+                  <label style="color: #A8A29E; font-size: 11px;">Remove stale rows after</label>
+                  <input type="text" value="5m" style="background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none;">
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="color: #A8A29E; font-size: 11px;">Aggregate status from extra workflows</label>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap; align-items: center;">
+                  <span style="background: #33302D; color: #E7E5E4; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-family: Consolas, monospace;">integration-tests.yml <span style="color: #78716C; cursor: pointer;">✕</span></span>
+                  <span style="background: #33302D; color: #E7E5E4; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-family: Consolas, monospace;">lint.yml <span style="color: #78716C; cursor: pointer;">✕</span></span>
+                  <span style="color: #78716C; font-size: 11px; cursor: pointer; padding: 3px 6px;" style-hover="color: #FBBF24;">+ add</span>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="color: #A8A29E; font-size: 11px;">Ignore noisy workflows</label>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap; align-items: center;">
+                  <span style="background: #33302D; color: #E7E5E4; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-family: Consolas, monospace;">shadow-it-check.yml <span style="color: #78716C; cursor: pointer;">✕</span></span>
+                  <span style="color: #78716C; font-size: 11px; cursor: pointer; padding: 3px 6px;" style-hover="color: #FBBF24;">+ add</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Notification override -->
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="flex: 1; color: #E7E5E4; font-size: 12px; font-weight: 600;">Notifications</span>
+                <span style="color: #78716C; font-size: 11px;">Using global defaults</span>
+                <div style="width: 30px; height: 17px; border-radius: 9px; background: #33302D; position: relative; cursor: pointer; flex: none;">
+                  <div style="width: 13px; height: 13px; border-radius: 50%; background: #78716C; position: absolute; top: 2px; left: 2px;"></div>
+                </div>
+              </div>
+              <span style="color: #57534E; font-size: 11px;">Turn on to override new-run / failure / success alerts and sounds for this workflow only.</span>
+            </div>
+
+            <!-- YAML preview -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="color: #A8A29E; font-size: 11.5px; font-weight: 600;">config.yaml preview</label>
+                <span style="color: #57534E; font-size: 11px;">— this entry will be appended to your file</span>
+              </div>
+              <pre style="margin: 0; background: #171412; border: 1px solid #292524; border-radius: 6px; color: #A8A29E; font-size: 11px; line-height: 1.6; padding: 12px 14px; font-family: Consolas, 'DejaVu Sans Mono', monospace; overflow-x: auto;">- url: https://github.com/your-org/your-repo/actions/workflows/acceptance-pr.yml
+  name: "Acceptance/PR"
+  mode: "pr"
+  polling_rate: 45
+  max_prs: 5
+  pr_stale_after: "5m"
+  extra_workflows:
+    - integration-tests.yml
+    - lint.yml
+  ignore_workflows:
+    - shadow-it-check.yml</pre>
+            </div>
+
+            <!-- Actions -->
+            <div style="display: flex; align-items: center; gap: 10px; padding-top: 2px;">
+              <div style="flex: 1;"></div>
+              <span onClick="{{ backToList }}" style="color: #A8A29E; font-size: 12px; padding: 7px 14px; cursor: pointer; border-radius: 6px;" style-hover="background: #262220;">Cancel</span>
+              <div onClick="{{ backToList }}" style="background: #FBBF24; color: #1C1917; font-size: 12px; font-weight: 600; padding: 7px 16px; border-radius: 6px; cursor: pointer;" style-hover="background: #F59E0B;">Add workflow</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ================= NOTIFICATIONS ================= -->
+        <sc-if value="{{ showNotifications }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div>
+              <div style="color: #F5F5F4; font-size: 15px; font-weight: 600;">Notifications</div>
+              <div style="color: #78716C; font-size: 11.5px; margin-top: 2px;">Global defaults. Individual workflows can override these.</div>
+            </div>
+
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 4px 16px;">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #292524;">
+                <div style="flex: 1;">
+                  <div style="color: #E7E5E4; font-size: 12.5px;">New run started</div>
+                  <div style="color: #78716C; font-size: 11px; margin-top: 1px;">A run begins on a monitored workflow</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; background: #262220; border: 1px solid #3B3734; border-radius: 6px; padding: 6px 10px; cursor: pointer; min-width: 90px; justify-content: space-between;">
+                  <span style="color: #E7E5E4; font-size: 11.5px;">whistle</span><span style="color: #78716C; font-size: 9px;">▾</span>
+                </div>
+                <div style="width: 30px; height: 17px; border-radius: 9px; background: #FBBF24; position: relative; cursor: pointer; flex: none;">
+                  <div style="width: 13px; height: 13px; border-radius: 50%; background: #1C1917; position: absolute; top: 2px; right: 2px;"></div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #292524;">
+                <div style="flex: 1;">
+                  <div style="color: #E7E5E4; font-size: 12.5px;">Run failed</div>
+                  <div style="color: #78716C; font-size: 11px; margin-top: 1px;">Failure, time-out, or action required</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; background: #262220; border: 1px solid #3B3734; border-radius: 6px; padding: 6px 10px; cursor: pointer; min-width: 90px; justify-content: space-between;">
+                  <span style="color: #E7E5E4; font-size: 11.5px;">default</span><span style="color: #78716C; font-size: 9px;">▾</span>
+                </div>
+                <div style="width: 30px; height: 17px; border-radius: 9px; background: #FBBF24; position: relative; cursor: pointer; flex: none;">
+                  <div style="width: 13px; height: 13px; border-radius: 50%; background: #1C1917; position: absolute; top: 2px; right: 2px;"></div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0;">
+                <div style="flex: 1;">
+                  <div style="color: #E7E5E4; font-size: 12.5px;">Run succeeded</div>
+                  <div style="color: #78716C; font-size: 11px; margin-top: 1px;">A run completes successfully</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; background: #262220; border: 1px solid #3B3734; border-radius: 6px; padding: 6px 10px; cursor: pointer; min-width: 90px; justify-content: space-between;">
+                  <span style="color: #78716C; font-size: 11.5px;">none</span><span style="color: #78716C; font-size: 9px;">▾</span>
+                </div>
+                <div style="width: 30px; height: 17px; border-radius: 9px; background: #FBBF24; position: relative; cursor: pointer; flex: none;">
+                  <div style="width: 13px; height: 13px; border-radius: 50%; background: #1C1917; position: absolute; top: 2px; right: 2px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+              <span style="color: #E7E5E4; font-size: 12px; font-weight: 600;">Delivery</span>
+              <div style="display: flex; gap: 14px; align-items: flex-end;">
+                <div style="width: 140px; display: flex; flex-direction: column; gap: 6px;">
+                  <label style="color: #A8A29E; font-size: 11px;">Batch window</label>
+                  <div style="display: flex; align-items: center; background: #262220; border: 1px solid #3B3734; border-radius: 6px;">
+                    <input type="text" value="1" style="background: transparent; border: none; color: #E7E5E4; font-size: 12px; padding: 8px 0 8px 12px; outline: none; width: 100%; font-variant-numeric: tabular-nums;">
+                    <span style="color: #78716C; font-size: 11px; padding: 0 12px;">sec</span>
+                  </div>
+                </div>
+                <div style="width: 160px; display: flex; flex-direction: column; gap: 6px;">
+                  <label style="color: #A8A29E; font-size: 11px;">Suppress older than</label>
+                  <input type="text" value="1h" style="background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <label style="color: #A8A29E; font-size: 11px;">Toast duration</label>
+                  <div style="display: flex; background: #262220; border: 1px solid #3B3734; border-radius: 6px; padding: 3px; gap: 2px;">
+                    <span style="background: #3D3530; color: #FBBF24; font-size: 11.5px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Short</span>
+                    <span style="color: #A8A29E; font-size: 11.5px; padding: 4px 12px; border-radius: 4px; cursor: pointer;" style-hover="color: #E7E5E4;">Long</span>
+                  </div>
+                </div>
+              </div>
+              <span style="color: #57534E; font-size: 11px;">Batching combines near-simultaneous events into one toast. Suppression prevents a flood after waking from sleep.</span>
+            </div>
+
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="flex: 1; color: #E7E5E4; font-size: 12px; font-weight: 600;">PR-mode overrides</span>
+                <div style="width: 30px; height: 17px; border-radius: 9px; background: #FBBF24; position: relative; cursor: pointer; flex: none;">
+                  <div style="width: 13px; height: 13px; border-radius: 50%; background: #1C1917; position: absolute; top: 2px; right: 2px;"></div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding-top: 4px;">
+                <span style="color: #A8A29E; font-size: 11.5px; flex: 1;">New run sound</span>
+                <div style="display: flex; align-items: center; gap: 8px; background: #262220; border: 1px solid #3B3734; border-radius: 6px; padding: 6px 10px; cursor: pointer; min-width: 90px; justify-content: space-between;">
+                  <span style="color: #78716C; font-size: 11.5px;">none</span><span style="color: #78716C; font-size: 9px;">▾</span>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="color: #A8A29E; font-size: 11.5px; flex: 1;">Notify on success</span>
+                <div style="width: 30px; height: 17px; border-radius: 9px; background: #33302D; position: relative; cursor: pointer; flex: none;">
+                  <div style="width: 13px; height: 13px; border-radius: 50%; background: #78716C; position: absolute; top: 2px; left: 2px;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ================= RULES (staleness + integrations) ================= -->
+        <sc-if value="{{ showRules }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div>
+              <div style="color: #F5F5F4; font-size: 15px; font-weight: 600;">PR rules</div>
+              <div style="color: #78716C; font-size: 11.5px; margin-top: 2px;">Staleness badges and how branch names are interpreted.</div>
+            </div>
+
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+              <span style="color: #E7E5E4; font-size: 12px; font-weight: 600;">Staleness thresholds</span>
+              <span style="color: #57534E; font-size: 11px;">Time since the PR was last updated. Accepts 30m, 12h, 1d, 2d12h…</span>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="text" value="1d" style="width: 70px; background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none; text-align: center;">
+                <span style="background: #3D3520; color: #EAB308; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 3px;">STALE 1d</span>
+                <span style="color: #78716C; font-size: 11px;">slightly stale</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="text" value="3d" style="width: 70px; background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none; text-align: center;">
+                <span style="background: #3A2A1C; color: #F97316; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 3px;">STALE 3d</span>
+                <span style="color: #78716C; font-size: 11px;">moderately stale</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="text" value="5d" style="width: 70px; background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none; text-align: center;">
+                <span style="background: #3A1C1C; color: #EF4444; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 3px;">STALE 5d</span>
+                <span style="color: #78716C; font-size: 11px;">very stale</span>
+              </div>
+            </div>
+
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="color: #E7E5E4; font-size: 12px; font-weight: 600;">Jira</span>
+              <label style="color: #A8A29E; font-size: 11px;">Base URL — ticket IDs in branch names become clickable badges</label>
+              <input type="text" value="https://mycompany.atlassian.net" style="background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none; font-family: Consolas, monospace;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: #57534E; font-size: 11px;">Preview:</span>
+                <span style="background: #302830; color: #A78BFA; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 3px; cursor: pointer;">EDU-1234</span>
+              </div>
+            </div>
+
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="color: #E7E5E4; font-size: 12px; font-weight: 600;">Bot reviewers</span>
+              <label style="color: #A8A29E; font-size: 11px;">Regex — matching logins get the robot glyph on review badges</label>
+              <input type="text" value="\[bot\]$" style="background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 8px 12px; outline: none; font-family: Consolas, monospace;">
+              <div style="display: flex; gap: 5px; align-items: center;">
+                <span style="color: #57534E; font-size: 11px;">Presets:</span>
+                <span style="background: #33302D; color: #A8A29E; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-family: Consolas, monospace;" style-hover="color: #FBBF24;">\[bot\]$</span>
+                <span style="background: #33302D; color: #A8A29E; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-family: Consolas, monospace;" style-hover="color: #FBBF24;">(?i)(\[bot\]|-bot$)</span>
+                <span style="background: #33302D; color: #A8A29E; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-family: Consolas, monospace;" style-hover="color: #FBBF24;">(?i)bot</span>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ================= GITHUB ================= -->
+        <sc-if value="{{ showGithub }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div>
+              <div style="color: #F5F5F4; font-size: 15px; font-weight: 600;">GitHub account</div>
+              <div style="color: #78716C; font-size: 11.5px; margin-top: 2px;">A classic personal access token with the repo scope. Required for private repositories.</div>
+            </div>
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+              <label style="color: #A8A29E; font-size: 11px; font-weight: 600;">Personal access token</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="password" value="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="flex: 1; background: #262220; border: 1px solid #3B3734; border-radius: 6px; color: #E7E5E4; font-size: 12px; padding: 9px 12px; outline: none; font-family: Consolas, monospace;" style-focus="border-color: #FBBF24;">
+                <div style="background: #33302D; color: #E7E5E4; font-size: 12px; font-weight: 600; padding: 9px 14px; border-radius: 6px; cursor: pointer; flex: none;" style-hover="background: #3D3530; color: #FBBF24;">Test token</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: #4ADE80;"></span>
+                <span style="color: #4ADE80; font-size: 11px;">Authenticated as WizX20</span>
+                <span style="color: #57534E; font-size: 11px;">· 4,987 / 5,000 requests remaining this hour</span>
+              </div>
+            </div>
+            <div style="background: #232020; border: 1px solid #292524; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+              <span style="color: #E7E5E4; font-size: 12px; font-weight: 600;">How to create one</span>
+              <span style="color: #78716C; font-size: 11.5px; line-height: 1.6;">1. Open <span style="color: #FBBF24; cursor: pointer;">github.com/settings/tokens ↗</span><br>2. Generate new token (classic)<br>3. Enable the top-level <span style="font-family: Consolas, monospace; color: #A8A29E;">repo</span> scope<br>4. Paste it above — it is stored only in your local config.yaml</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ================= RAW YAML ================= -->
+        <sc-if value="{{ showYaml }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 12px; height: 100%;">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="flex: 1;">
+                <div style="color: #F5F5F4; font-size: 15px; font-weight: 600;">config.yaml</div>
+                <div style="color: #78716C; font-size: 11.5px; margin-top: 2px;">The file behind everything in this window. Edit it here or in your own editor — changes hot-reload either way.</div>
+              </div>
+              <span style="color: #FBBF24; font-size: 11px; font-weight: 600; cursor: pointer; flex: none; margin-top: 4px;" style-hover="text-decoration: underline;">Open in editor ↗</span>
+            </div>
+            <pre style="margin: 0; flex: 1; background: #171412; border: 1px solid #292524; border-radius: 8px; color: #A8A29E; font-size: 11px; line-height: 1.65; padding: 14px 16px; font-family: Consolas, 'DejaVu Sans Mono', monospace; overflow: auto;"><span style="color: #57534E;"># GitHub personal access token (classic, repo scope)</span>
+github_token: <span style="color: #E7E5E4;">"ghp_••••••••••••••••••••"</span>
+jira_base_url: <span style="color: #E7E5E4;">"https://mycompany.atlassian.net"</span>
+
+notifications:
+  batch_window: <span style="color: #FBBF24;">1</span>
+  max_notification_age: <span style="color: #E7E5E4;">"1h"</span>
+  duration: <span style="color: #E7E5E4;">short</span>
+  new_run:  { enabled: <span style="color: #FBBF24;">true</span>,  sound: <span style="color: #E7E5E4;">whistle</span> }
+  failure:  { enabled: <span style="color: #FBBF24;">true</span>,  sound: <span style="color: #E7E5E4;">default</span> }
+  success:  { enabled: <span style="color: #FBBF24;">true</span>,  sound: <span style="color: #E7E5E4;">none</span> }
+
+staleness_thresholds:
+  slightly_stale: <span style="color: #E7E5E4;">"1d"</span>
+  moderately_stale: <span style="color: #E7E5E4;">"3d"</span>
+  very_stale: <span style="color: #E7E5E4;">"5d"</span>
+
+workflows:
+  - url: <span style="color: #E7E5E4;">https://github.com/your-org/your-repo/actions/workflows/acceptance-merge.yml</span>
+    name: <span style="color: #E7E5E4;">"Acceptance Merge"</span>
+    polling_rate: <span style="color: #FBBF24;">30</span>
+    branch: <span style="color: #E7E5E4;">acceptance</span>
+
+  - url: <span style="color: #E7E5E4;">https://github.com/your-org/your-repo/actions/workflows/acceptance-pr.yml</span>
+    name: <span style="color: #E7E5E4;">"Acceptance/PR"</span>
+    mode: <span style="color: #E7E5E4;">"pr"</span>
+    polling_rate: <span style="color: #FBBF24;">45</span>
+    max_prs: <span style="color: #FBBF24;">5</span></pre>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 880, &quot;height&quot;: 700}, &quot;initialTab&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;workflows&quot;, &quot;options&quot;: [&quot;workflows&quot;, &quot;notifications&quot;, &quot;rules&quot;, &quot;github&quot;, &quot;yaml&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Preview&quot;}}">
+class Component extends DCLogic {
+  state = { tab: this.props.initialTab ?? "workflows", view: "list" };
+
+  renderVals() {
+    const { tab, view } = this.state;
+    const items = [
+      { key: "workflows", label: "Workflows" },
+      { key: "notifications", label: "Notifications" },
+      { key: "rules", label: "PR rules" },
+      { key: "github", label: "GitHub account" },
+      { key: "yaml", label: "Raw YAML" },
+    ];
+    const navItems = items.map((it) => {
+      const active = tab === it.key;
+      return {
+        label: it.label,
+        onClick: () => this.setState({ tab: it.key, view: "list" }),
+        style:
+          "padding: 8px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; " +
+          (active
+            ? "background: #292524; color: #FBBF24; font-weight: 600;"
+            : "color: #A8A29E;"),
+      };
+    });
+    return {
+      navItems,
+      showWorkflowList: tab === "workflows" && view === "list",
+      showAddForm: tab === "workflows" && view === "add",
+      showNotifications: tab === "notifications",
+      showRules: tab === "rules",
+      showGithub: tab === "github",
+      showYaml: tab === "yaml",
+      openAdd: () => this.setState({ view: "add" }),
+      backToList: () => this.setState({ view: "list" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

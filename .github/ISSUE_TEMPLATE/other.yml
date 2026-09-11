@@ -1,0 +1,30 @@
+name: Other
+description: Anything that is not a bug or a feature request — docs, packaging, a question the Discussions tab does not fit.
+title: "[Other] "
+labels: ["triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use **Bug report** for something that breaks and **Feature request** for something new. This form is for everything else: documentation, install/packaging, build or CI, or a question that needs an answer in the repo rather than in Discussions.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: What is it about?
+      options:
+        - Documentation
+        - Install / packaging
+        - Build / CI
+        - Question
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you ran into, what you expected, links to the file or page involved.
+    validations:
+      required: true

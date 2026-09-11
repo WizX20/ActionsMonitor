@@ -36,10 +36,16 @@ IS_WINDOWS = platform.system() == "Windows"
 # Colour palette — warm dark theme
 # ---------------------------------------------------------------------------
 BG_DARK    = "#1C1917"   # stone-900
-BG_ROW     = "#292524"   # stone-800
-BG_ROW_ALT = "#231F1E"   # between stone-800 and 900
+BG_ROW     = "#262220"   # card row fill (design v2)
+BG_ROW_ALT = "#262220"   # kept for import compat — rows are uniform cards now
+BG_ROW_HOVER   = "#2C2825"  # card hover
+BG_ROW_SNOOZED = "#221F1D"  # dimmed card for snoozed rows
+BG_FOOTER  = "#232020"   # footer bar
+BORDER     = "#33302D"   # hairlines / separators
 FG_TEXT    = "#E7E5E4"   # stone-200
+FG_TITLE   = "#F5F5F4"   # stone-100 — row titles / headings
 FG_MUTED   = "#A8A29E"   # stone-400
+FG_FAINT   = "#78716C"   # stone-500 — secondary meta text
 FG_LINK    = "#FBBF24"   # amber-400 (primary accent)
 ACCENT     = "#292524"   # stone-800
 UI_FONT    = "Segoe UI" if IS_WINDOWS else "DejaVu Sans"
@@ -117,8 +123,8 @@ def _make_badge(text: str, bg: str, fg: str, bold: bool = False) -> QLabel:
     lbl = QLabel(text)
     weight = "bold" if bold else "normal"
     lbl.setStyleSheet(
-        f"background-color: {bg}; color: {fg}; font-size: 9px; font-weight: {weight}; "
-        f"padding: 1px 3px; border-radius: 2px;"
+        f"background-color: {bg}; color: {fg}; font-size: 10px; font-weight: {weight}; "
+        f"padding: 2px 6px; border-radius: 3px;"
     )
     lbl.setVisible(False)
     return lbl
@@ -138,6 +144,10 @@ class WorkflowRow(QWidget):
         self._snoozed = False
         self._icon_opacity: Optional[QGraphicsOpacityEffect] = None
         self._bg = BG_ROW_ALT if alt else BG_ROW
+        # Qt only auto-enables styled backgrounds for exact-QWidget instances;
+        # without this the `WorkflowRow { background-color }` QSS (zebra
+        # striping, blink-on-focus) never paints on this subclass.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_right_click)
 
@@ -145,11 +155,18 @@ class WorkflowRow(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Left accent bar
+        # Left accent bar — inset pill (design v2: 3px wide, 2px radius,
+        # 6px from the card edge, 2px vertical inset)
+        accent_wrap = QWidget()
+        accent_layout = QVBoxLayout(accent_wrap)
+        accent_layout.setContentsMargins(6, 2, 0, 2)
+        accent_layout.setSpacing(0)
         self._accent = QFrame()
         self._accent.setFixedWidth(3)
-        self._accent.setStyleSheet(f"background-color: {COLOUR[state.status]};")
-        main_layout.addWidget(self._accent)
+        self._accent.setStyleSheet(
+            f"background-color: {COLOUR[state.status]}; border-radius: 2px;")
+        accent_layout.addWidget(self._accent)
+        main_layout.addWidget(accent_wrap)
 
         # Left column: icon + snooze
         left_col = QVBoxLayout()
@@ -159,7 +176,7 @@ class WorkflowRow(QWidget):
         self._icon_lbl = QLabel()
         pixmap = _status_qpixmaps.get(state.status, _status_qpixmaps.get(ST_UNKNOWN))
         self._icon_lbl.setPixmap(pixmap)
-        self._icon_lbl.setFixedSize(24, 24)
+        self._icon_lbl.setFixedSize(22, 22)
         left_col.addWidget(self._icon_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
         main_layout.addLayout(left_col)
 
@@ -175,7 +192,10 @@ class WorkflowRow(QWidget):
 
         self._pr_title_lbl = _TitleLabel(
             url_fn=lambda: self._state.pr_url)
-        self._pr_title_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
+        # PR titles are user-controlled text — never let QLabel auto-detect
+        # them as rich text (a title containing <table> etc. would be parsed).
+        self._pr_title_lbl.setTextFormat(Qt.TextFormat.PlainText)
+        self._pr_title_lbl.setStyleSheet(_link_css(FG_TITLE, 13))
         self._pr_title_lbl.setToolTip("Open PR on GitHub")
         self._pr_title_lbl.setMinimumWidth(0)
         self._pr_title_lbl.setWordWrap(True)
@@ -185,8 +205,9 @@ class WorkflowRow(QWidget):
 
         # Target label — PR-mode only; the `→ target` suffix links to the branch tree.
         self._target_lbl = _ClickableLabel(url_fn=self._target_url)
+        self._target_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._target_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
-        self._target_lbl.setToolTip("Open branch on GitHub")
+        self._target_lbl.setToolTip("Open target branch on GitHub")
         self._target_lbl.setMinimumWidth(0)
         self._target_lbl.setWordWrap(False)
         self._target_lbl.setVisible(False)
@@ -206,7 +227,8 @@ class WorkflowRow(QWidget):
         self._top_row.setSpacing(0)
 
         self._name_lbl = _TitleLabel(state.name, url_fn=self._name_url)
-        self._name_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
+        self._name_lbl.setTextFormat(Qt.TextFormat.PlainText)
+        self._name_lbl.setStyleSheet(_link_css(FG_TITLE, 13))
         self._name_lbl.setMinimumWidth(0)
         self._name_lbl.setWordWrap(True)
         self._top_row.addWidget(self._name_lbl, 0)
@@ -221,6 +243,7 @@ class WorkflowRow(QWidget):
         # the latest run; in branch/actor mode shows the branch and links
         # to the branch tree.
         self._branch_lbl = _ClickableLabel(url_fn=self._branch_url)
+        self._branch_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._branch_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
         self._branch_lbl.setToolTip("Open branch on GitHub")
         self._branch_lbl.setMinimumWidth(0)
@@ -275,6 +298,7 @@ class WorkflowRow(QWidget):
 
         # Status info line — clickable, opens the latest run instance.
         self._info_lbl = _ClickableLabel(url_fn=lambda: self._state.run_url or self._state.url)
+        self._info_lbl.setTextFormat(Qt.TextFormat.PlainText)
         self._info_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
         self._info_lbl.setToolTip("Open latest run on GitHub")
         self._info_lbl.setMinimumWidth(0)
@@ -295,7 +319,10 @@ class WorkflowRow(QWidget):
 
         self._snooze_btn = QLabel()
         self._snooze_btn.setPixmap(_snooze_qpixmaps.get("normal", QPixmap()))
-        self._snooze_btn.setFixedSize(16, 16)
+        self._snooze_btn.setFixedSize(24, 24)
+        self._snooze_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._snooze_btn.setStyleSheet(
+            "QLabel { border-radius: 6px; } QLabel:hover { background-color: #33302D; }")
         self._snooze_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._snooze_btn.setToolTip("Snooze - pause polling, dim the row, mute notifications")
         self._snooze_btn.mousePressEvent = lambda e: self._toggle_snooze()
@@ -312,10 +339,31 @@ class WorkflowRow(QWidget):
         self._apply_background()
         self._update_labels()
 
+    # The app-wide `QWidget { background-color: BG_DARK }` rule would paint
+    # dark patches behind the row's child containers (badge row, right column,
+    # spacer widgets) on top of the card fill — force descendants transparent.
+    # Widget-level styles (accent bar, badges, snooze hover) still win.
+    _CHILD_RESET = "WorkflowRow QWidget { background-color: transparent; }"
+
     def _apply_background(self):
+        hover = self._bg if self._snoozed else BG_ROW_HOVER
         self.setStyleSheet(
-            f"WorkflowRow {{ background-color: {self._bg}; }}"
+            f"WorkflowRow {{ background-color: {self._bg}; border-radius: 6px; }} "
+            f"WorkflowRow:hover {{ background-color: {hover}; }} "
+            + self._CHILD_RESET
         )
+
+    def paint_bg(self, colour: str):
+        """Temporarily flood the card with `colour` (blink-on-focus). Call
+        `_apply_background()` to restore the normal fill."""
+        self.setStyleSheet(
+            f"WorkflowRow {{ background-color: {colour}; border-radius: 6px; }} "
+            + self._CHILD_RESET
+        )
+
+    def _set_accent(self, colour: str):
+        self._accent.setStyleSheet(
+            f"background-color: {colour}; border-radius: 2px;")
 
     def _name_url(self) -> Optional[str]:
         s = self._state
@@ -334,7 +382,9 @@ class WorkflowRow(QWidget):
 
     def _target_url(self) -> Optional[str]:
         s = self._state
-        return s.branch_url or s.run_url or s.url
+        # The label displays the PR *target* branch — link there, not to the
+        # head branch (branch_url is always built from the head branch).
+        return s.target_url or s.branch_url or s.run_url or s.url
 
     def _on_right_click(self, pos):
         if self._snooze_cb:
@@ -364,28 +414,34 @@ class WorkflowRow(QWidget):
         dim_text = "#57534E"
         dim_muted = "#44403C"
         if snoozed:
-            self._accent.setStyleSheet(f"background-color: #3F3B38;")
+            self._bg = BG_ROW_SNOOZED
+            self._set_accent("#3F3B38")
             self._info_lbl.setStyleSheet(_link_css(dim_muted, 11))
-            self._name_lbl.setStyleSheet(_link_css(dim_text, 12))
+            self._name_lbl.setStyleSheet(_link_css(dim_text, 13))
             self._poll_lbl.setStyleSheet(f"color: {dim_muted}; font-size: 11px;")
             self._branch_lbl.setStyleSheet(_link_css(dim_muted, 11))
             self._target_lbl.setStyleSheet(_link_css(dim_muted, 11))
-            self._pr_title_lbl.setStyleSheet(_link_css(dim_text, 12))
+            self._pr_title_lbl.setStyleSheet(_link_css(dim_text, 13))
             if self._icon_opacity is None:
                 self._icon_opacity = QGraphicsOpacityEffect(self._icon_lbl)
                 self._icon_lbl.setGraphicsEffect(self._icon_opacity)
             self._icon_opacity.setOpacity(0.35)
         else:
-            self._accent.setStyleSheet(
-                f"background-color: {COLOUR.get(self._state.status, COLOUR[ST_UNKNOWN])};")
+            self._bg = BG_ROW
+            self._set_accent(COLOUR.get(self._state.status, COLOUR[ST_UNKNOWN]))
+            # Status may have changed while snoozed (update() skips the icon
+            # when snoozed) — refresh the pixmap so icon and accent agree.
+            self._icon_lbl.setPixmap(
+                _status_qpixmaps.get(self._state.status, _status_qpixmaps.get(ST_UNKNOWN)))
             self._info_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
-            self._name_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
+            self._name_lbl.setStyleSheet(_link_css(FG_TITLE, 13))
             self._poll_lbl.setStyleSheet(f"color: {FG_MUTED}; font-size: 11px;")
             self._branch_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
             self._target_lbl.setStyleSheet(_link_css(FG_MUTED, 11))
-            self._pr_title_lbl.setStyleSheet(_link_css(FG_TEXT, 12))
+            self._pr_title_lbl.setStyleSheet(_link_css(FG_TITLE, 13))
             if self._icon_opacity is not None:
                 self._icon_opacity.setOpacity(1.0)
+        self._apply_background()
         self._restyle_static_badges()
         self._update_labels()
 
@@ -393,8 +449,8 @@ class WorkflowRow(QWidget):
         if self._snoozed:
             bg, fg = "#2C2825", "#57534E"
         weight = "bold" if bold else "normal"
-        return (f"background-color: {bg}; color: {fg}; font-size: 9px; "
-                f"font-weight: {weight}; padding: 1px 3px; border-radius: 2px;")
+        return (f"background-color: {bg}; color: {fg}; font-size: 10px; "
+                f"font-weight: {weight}; padding: 2px 6px; border-radius: 3px;")
 
     def _restyle_static_badges(self):
         self._prefix_lbl.setStyleSheet(self._badge_css("#3D3530", "#FBBF24"))
@@ -411,8 +467,7 @@ class WorkflowRow(QWidget):
         self._state = state
         self._jira_base_url = jira_base_url or self._jira_base_url
         if not self._snoozed:
-            self._accent.setStyleSheet(
-                f"background-color: {COLOUR.get(state.status, COLOUR[ST_UNKNOWN])};")
+            self._set_accent(COLOUR.get(state.status, COLOUR[ST_UNKNOWN]))
             pixmap = _status_qpixmaps.get(state.status, _status_qpixmaps.get(ST_UNKNOWN))
             self._icon_lbl.setPixmap(pixmap)
         self._poll_lbl.setText(f"{poll_rate}s")
@@ -434,6 +489,11 @@ class WorkflowRow(QWidget):
                     pass
 
         self._info_lbl.setText(status_txt)
+        # Failed / errored runs get a red info line (design v2); everything
+        # else stays muted. Snoozed rows keep their dimmed style.
+        if not self._snoozed:
+            info_col = COLOUR[ST_FAILURE] if (s.error or s.status == ST_FAILURE) else FG_MUTED
+            self._info_lbl.setStyleSheet(_link_css(info_col, 11))
 
         has_badges = False
         if s.head_branch:
@@ -462,7 +522,7 @@ class WorkflowRow(QWidget):
             if s.pr_number:
                 self._branch_lbl.setToolTip("Open latest run on GitHub")
                 if s.pr_target:
-                    self._target_lbl.setText(s.pr_target)
+                    self._target_lbl.setText(f"→ {s.pr_target}")
                     self._target_lbl.setVisible(True)
                 else:
                     self._target_lbl.setVisible(False)
