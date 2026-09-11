@@ -13,3 +13,52 @@ jobs:
     uses: ./.github/workflows/_build.yml
     with:
       upload_artifacts: true
+
+  token-expiry:
+    name: release token expiry
+    runs-on: ubuntu-latest
+    # Pull requests from forks carry no secrets: nothing to check there, and the job must not
+    # block them. Everything else (own branches, pushes to main) gets the check.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      SECRET_NAME: ACTIONSMONITOR_RELEASE_TOKEN
+      WARN_DAYS: 30
+      FAIL_DAYS: 14
+      ISSUE: https://github.com/WizX20/ActionsMonitor/issues/35
+    steps:
+      - name: Read the token's expiry from the API
+        env:
+          TOKEN: ${{ secrets.ACTIONSMONITOR_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The release commit is pushed with this fine-grained PAT (main is PR-only; GITHUB_TOKEN
+          # cannot bypass the ruleset). A lapsed token breaks every release, so the token's own
+          # expiry - GitHub sends it back on any call made with it - gates merges: a warning from
+          # WARN_DAYS out, a failure from FAIL_DAYS out. Rotate per $ISSUE, no date to maintain.
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Repository secret $SECRET_NAME is missing - releases cannot push to main."
+            exit 1
+          fi
+          HEADERS=$(curl -sS -D - -o /dev/null -H "Authorization: Bearer $TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/user)
+          STATUS=$(printf '%s\n' "$HEADERS" | head -1 | tr -d '\r')
+          case "$STATUS" in
+            *" 200"*) ;;
+            *) echo "::error::$SECRET_NAME was rejected by the API ($STATUS) - expired or revoked? Rotate it: $ISSUE"; exit 1 ;;
+          esac
+          EXPIRES=$(printf '%s\n' "$HEADERS" | grep -i '^github-authentication-token-expiration:' | cut -d' ' -f2- | tr -d '\r' || true)
+          if [ -z "$EXPIRES" ]; then
+            echo "::error::$SECRET_NAME has no expiration header - is it a fine-grained token with an expiry?"
+            exit 1
+          fi
+          DAYS=$(( ( $(date -u -d "$EXPIRES" +%s) - $(date -u +%s) ) / 86400 ))
+          echo "$SECRET_NAME expires on $EXPIRES - $DAYS day(s) left"
+          echo "### Release token" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$SECRET_NAME\` expires on **$EXPIRES** ($DAYS days left)." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DAYS" -le "$FAIL_DAYS" ]; then
+            echo "::error::$SECRET_NAME expires in $DAYS day(s) ($EXPIRES). Rotate it before merging anything else: $ISSUE"
+            exit 1
+          fi
+          if [ "$DAYS" -le "$WARN_DAYS" ]; then
+            echo "::warning::$SECRET_NAME expires in $DAYS day(s) ($EXPIRES). Rotate it soon: $ISSUE"
+          fi
