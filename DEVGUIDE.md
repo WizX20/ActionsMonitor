@@ -47,9 +47,19 @@ sudo apt-get install -y python3-pip python3-tk python3-venv gir1.2-gtk-3.0 gir1.
 pip3 install --break-system-packages -r src/requirements.txt pyinstaller
 ```
 
+## GitHub account: everything as WizX20
+
+This repo is published from a machine that also has a work GitHub account logged in to `gh`. Rather than `gh auth switch` back and forth, the repo carries a [`.gitconfig`](.gitconfig) that a maintainer includes once per clone:
+
+```powershell
+task setup      # = git config --local include.path ../.gitconfig
+```
+
+From then on, inside this clone, commits are authored as `WizX20 <…>`, `git push` / `git fetch` authenticate as WizX20 (the credential helper obtains that account's token from the keyring at call time via `gh auth token --user WizX20` and hands it to `gh auth git-credential` through `GH_TOKEN` — the CLI's helper otherwise only serves the *active* account), and `git gh <anything>` (or `task gh -- <anything>`) runs the GitHub CLI the same way: `git gh pr create`, `git gh run watch`, … Nothing is written to disk and the active `gh` account is untouched. Plain `gh` still uses whatever account is active — use `git gh` in this repo. Contributors never need any of this; without the include the file is inert.
+
 ## Release process
 
-Releases are driven by `.github/workflows/release.yml` (manual dispatch only). The workflow:
+Releases are driven by `.github/workflows/_release.yml`, called by `build.yml` (**weekly**, Tuesday 06:00 UTC, Scoop only) and by `release.yml` (manual dispatch, Scoop + optional winget). The workflow:
 
 1. **`check`** — first verifies that the latest completed CI run on `main` is `success` (`gh run list -w ci.yml -b main --status completed -L 1`); aborts the release if not. Then compares HEAD to the latest release's `targetCommitish`; skips if identical.
 2. **`build`** — calls the reusable `_build.yml` workflow (shared with CI). Runs PyInstaller on `windows-latest` / `ubuntu-latest`; embeds a 7-char commit SHA into `src/version.py`.

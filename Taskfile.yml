@@ -5,6 +5,18 @@ vars:
   PY: python
 
 tasks:
+  setup:
+    desc: Maintainer, once per clone - route all GitHub traffic from this repo through the WizX20 account (see .gitconfig)
+    cmds:
+      - git config --local include.path ../.gitconfig
+      - git config user.name
+      - git config user.email
+
+  gh:
+    desc: Run the GitHub CLI as WizX20 without switching accounts, e.g. task gh -- pr status
+    cmds:
+      - git gh {{.CLI_ARGS}}
+
   install:
     desc: Install runtime dependencies
     cmds:
