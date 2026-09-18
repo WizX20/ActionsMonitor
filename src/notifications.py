@@ -64,7 +64,9 @@ def _ensure_focus_vbs():
         'Set fso = CreateObject("Scripting.FileSystemObject")\n'
         f'fso.CreateTextFile "{_FOCUS_SIGNAL}", True\n'
     )
-    _FOCUS_VBS.write_text(script, encoding="utf-8")
+    # Windows Script Host parses .vbs as ANSI unless the file carries a UTF-16
+    # BOM — UTF-8 would mojibake non-ASCII install paths (accented usernames).
+    _FOCUS_VBS.write_text(script, encoding="utf-16")
 
 
 # Named sounds → winotify audio presets (Windows toast-coupled sounds)
@@ -89,13 +91,21 @@ _linux_default_sound_cache: Optional[str] = None
 
 
 def _find_linux_default_sound() -> Optional[str]:
-    """Search XDG data dirs for a usable notification sound file."""
+    """Search XDG data dirs for a usable notification sound file.
+
+    aplay (ALSA) cannot decode Ogg/Vorbis, so on paplay-less systems only
+    .wav candidates are considered — otherwise `sound: "default"` would
+    silently pick an .oga file that aplay errors out on.
+    """
     global _linux_default_sound_cache
     if _linux_default_sound_cache is not None:
         return _linux_default_sound_cache or None
+    wav_only = not shutil.which("paplay")
     xdg_dirs = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":")
     for d in xdg_dirs:
         for candidate in _LINUX_SOUND_CANDIDATES:
+            if wav_only and not candidate.endswith(".wav"):
+                continue
             path = os.path.join(d, candidate)
             if os.path.isfile(path):
                 _linux_default_sound_cache = path

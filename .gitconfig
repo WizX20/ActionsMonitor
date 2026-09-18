@@ -1,0 +1,26 @@
+# Maintainer git config for this repository.
+#
+# Everything this clone says to GitHub goes out as the WizX20 account - commits, pushes and
+# `gh` calls alike - no matter which account `gh auth status` reports as active. One-time
+# activation per clone (git deliberately ignores config files inside a checkout):
+#
+#     git config --local include.path ../.gitconfig      # or: task setup
+#
+# Contributors do not need this file: without the include it is inert.
+#
+# How it works: the GitHub CLI's git credential helper only hands out the token of the
+# *active* gh account, but it honours GH_TOKEN first. `gh auth token --user WizX20` reads
+# that account's token from the OS keyring at call time, so nothing is written to disk and
+# no `gh auth switch` is needed. `git gh <args>` runs the CLI the same way.
+
+[user]
+	name = WizX20
+	email = nerdsonwaves@outlook.com
+
+[credential "https://github.com"]
+	helper =
+	helper = "!f() { t=$(gh auth token --user WizX20) || return 1; GH_TOKEN=$t gh auth git-credential \"$@\"; }; f"
+
+[alias]
+	# `git gh pr create`, `git gh release list`, ... - the GitHub CLI as WizX20, no switching.
+	gh = "!f() { t=$(gh auth token --user WizX20) || exit 1; GH_TOKEN=$t gh \"$@\"; }; f"

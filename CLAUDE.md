@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## GitHub account — always WizX20
+
+This repo is published under the **WizX20** account from a machine whose active `gh` account is a work account. Never run `gh auth switch`. Inside this clone:
+
+- `git push` / `git fetch` authenticate as WizX20 through the included [`.gitconfig`](.gitconfig) — activated once per clone with `task setup` (= `git config --local include.path ../.gitconfig`). Check with `git config user.name`: it must print `WizX20`.
+- Use **`git gh …`** (or `task gh -- …`) instead of `gh …` for PRs, releases, workflow runs and API calls. Plain `gh` acts as the wrong account.
+- Commits must be authored as `WizX20 <nerdsonwaves@outlook.com>`; if `git config user.email` shows anything else, run `task setup` before committing.
+- How it works: the GitHub CLI's git credential helper only serves the *active* account but honours `GH_TOKEN` first; the helper in `.gitconfig` fetches WizX20's token from the OS keyring at call time (`gh auth token --user WizX20`), so nothing is written to disk. Same mechanism as in [WizX20/PSWorktree](https://github.com/WizX20/PSWorktree).
+
 ## Running the app
 
 ```bash
@@ -18,11 +27,27 @@ pythonw src/main.py
 src\build.bat          # produces ActionsMonitor.exe in the project root
 ```
 
+## Testing
+
+Integration tests run the real Qt UI on the `offscreen` platform plugin — no display, no network (poller threads are prevented from starting; poll results are injected as `StatusEvent`s). A `task` runner (Taskfile.yml) wraps the repeatable commands:
+
+```bash
+task install-dev       # pip install runtime + test deps
+task test              # python -m pytest tests  (pass extra args after --)
+task screenshots       # regenerate UI screenshots into artifacts/screenshots/
+task run               # python src/main.py
+task build             # src\build.bat (Windows)
+```
+
+- `tests/conftest.py` — session `qapp` (dark stylesheet applied for production parity), `screenshot` fixture (saves `widget.grab()` PNGs to `artifacts/screenshots/`, gitignored), and `app_env` (per-test temp config/state paths patched into `main` + `settings_ui`, poller `start()` no-op'd, `make_window(config_text)` factory, `push(win, event)` queue-drain helper).
+- `tests/demo_data.py` — shared fake config + `StatusEvent` fixtures (branch success/failure rows, PR rows with badges).
+- Screenshot tests are named `test_screenshot_*` so `-k screenshot` selects them; they double as visual regression checks (fonts render as tofu boxes offscreen — layout/colours are what matters).
+
 When running as a `.exe`, place `config.yaml` next to the executable (project root).
 
 ## Architecture
 
-Eight source files (one-way import direction — extracted modules never import from `main`):
+Nine source files (one-way import direction — extracted modules never import from `main`):
 
 - `src/main.py` — `ConfigManager`, `MainWindow`, `StartupManager`, monitor / window-state helpers, the dark stylesheet, `main()`. Wires `notifications.configure(...)` and `update.configure(...)` once at module init.
 - `src/status.py` — pure-data module (no PIL / Qt / requests): the seven `ST_*` literals, `CONCLUSION_MAP`, `_STATUS_PRIORITY`, and `_resolve_status`. Single source of truth — `pollers`, `icons`, and `widgets` all import from here.
@@ -31,6 +56,7 @@ Eight source files (one-way import direction — extracted modules never import 
 - `src/notifications.py` — `NotificationManager` + `NOTIF` singleton, `_PendingNotification`, `_NAMED_SOUNDS`, `_find_linux_default_sound`, `_ensure_focus_vbs`, plus `LINUX_MISSING` for the friendly missing-deps dialog. Imports `plyer` / `winotify` / `winsound` here (instead of `main`). Per-process paths (`APP_ICO`, `_FOCUS_VBS`, `_FOCUS_SIGNAL`) come in through `notifications.configure(app_name=..., app_ico=..., focus_vbs=..., focus_signal=...)`.
 - `src/pollers.py` — the four poller classes (`WorkflowPoller`, `PRWorkflowPoller`, `ActorWorkflowPoller`, `URLQueryPoller`), `WorkflowState` + `StatusEvent` dataclasses, `POLL_DEFAULT`, helpers (`_deep_merge`, `parse_branch_prefix`, `extract_jira_key`, `parse_duration`, `_format_age`, `_worst_status`, `_combined_status`), and the snooze registry (`_snoozed_keys`, `_snoozed_lock`, `_is_snoozed`) with public `add_snooze` / `discard_snooze` / `clear_snooze` / `replace_snoozed` for MainWindow to mutate. Re-exports status constants (`ST_*`, `CONCLUSION_MAP`, `_STATUS_PRIORITY`, `_resolve_status`) from `status.py` for backward compat. `ConfigManager` is referenced via `TYPE_CHECKING` only to avoid the runtime-import circular trap.
 - `src/widgets.py` — `WorkflowRow`, `_ClickableLabel`, `_TitleLabel`, `_link_css`, `_make_badge`, the colour palette (`COLOUR`, `STATUS_LABEL`, `BG_*`, `FG_*`, `ACCENT`, `UI_FONT`), and the badge config dicts. Imports `pollers` for `WorkflowState` / status constants. main.py re-imports the colour constants from `widgets` so existing call sites keep working.
+- `src/settings_ui.py` — the in-app Settings window (beta, gated by `beta.settings_ui`): `SettingsDialog` (left nav: Workflows / Notifications / PR rules / GitHub account / Raw YAML) + `WorkflowFormDialog` (add/edit with URL mode detection + live YAML preview), plus the comment-preserving config round-trip (`load_raw_config` / `save_raw_config` via ruamel.yaml, PyYAML fallback). Self-contained — `main.py` injects `CONFIG_FILE` / `open_in_editor` via `settings_ui.configure(...)` at module init; the dialog receives the `ConfigManager` instance as a constructor arg and never touches MainWindow (config writes flow back through the 5s mtime watcher).
 - `src/update.py` — release check, download/extract/swap, restart helper, `UpdateChecker` + `UpdateDialog`, `_detect_install_source`, `_cleanup_stale_mei_dirs`. **Self-contained — no compile-time main imports** because PyInstaller re-executes the entry script as both `__main__` and `main`, so `from main import ...` triggers a circular reload. Instead `update.py` declares module-level placeholders and exposes `configure(...)` for one-shot injection of `APP_NAME`, `BUILD_COMMIT`, `IS_WINDOWS`, the theme colours, and `_ClickableLabel`. `main.py` calls `update.configure(...)` once during module init.
 
 All extracted modules are import-only consumers of `requests` / `PIL` / `PySide6` and pass dependency-check failures through the friendly Qt dialog because their imports sit below the dep-check block in `main.py`.
@@ -74,13 +100,14 @@ WorkflowPoller._poll()        # branch mode (default)
 PRWorkflowPoller._poll()      # pr mode
   → fetch_github_username()     # cached GET /user
   → fetch_pr_runs() × N         # primary + extra_workflows
-  → _fetch_user_open_prs()      # GET /pulls?state=open&creator=... — discovers PRs with old/no runs
-  → _fetch_branch_runs() × M    # per-branch fetch for newly discovered PR branches
+  → _fetch_user_open_prs()      # GET /pulls?state=open (100 newest-updated, author-filtered client-side)
+  → _fetch_branch_runs() × M    # per-branch fill-in for each configured workflow the bulk fetch missed
+  → _fetch_head_sha_run()       # fallback: latest run on PR head SHA when no configured workflow has runs
   → filter out closed PRs       # drop runs for branches without an open PR
   → group by head_branch        # latest run per workflow file per branch
   → group by PR number          # one sub-group per unique PR (supports multiple PRs per branch)
   → _fetch_prs_for_branch()     # fallback: GET /pulls?head=... when runs lack PR data
-  → aggregate status (worst wins)  # failure > running > queued > success (per PR)
+  → aggregate status (worst wins)  # failure > running > queued > cancelled > success > skipped (per PR)
   → pick representative run     # highest-priority status run for display
   → _fetch_pr_draft()           # GET /pulls/{n} → caches draft + title + base_ref + updated_at (every poll)
   → _fetch_pr_review_status()   # GET /pulls/{n}/reviews → approved/changes_requested/pending (cached 120s)
@@ -113,7 +140,7 @@ ActorWorkflowPoller._poll()   # actor mode
 - **`URLQueryPoller`** — subclass of `WorkflowPoller` (URL mode); runs a user-supplied `q=` string against `/search/issues`, filters to PR results, and fetches PR detail + review status + latest CI run (by `head_sha`) for each. Row `status` comes from the CI run so the subtitle links to it; review state is surfaced via the badge. Skips notification emission entirely. Caches (`_pr_cache`, `_review_cache`) keyed by `(owner, repo, pr_num)` because queries span repos.
 - **`WorkflowRow`** — `QWidget` subclass with three lines: title, optional badges (prefix + DRAFT), and status text. PR rows hide the workflow name (shown in the section header) and display PR# + branch as the title. Has a coloured left accent bar and a Lucide-style status icon.
 - **`QSystemTrayIcon`** — built into `MainWindow`; coloured PIL icons are converted to `QIcon` via `_pil_to_qpixmap()` and pre-generated at startup.
-- **`StartupManager`** — reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (Windows only); no admin required.
+- **`StartupManager`** — reads/writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (Windows only); no admin required. Frozen builds call `heal()` at launch to rewrite a stale entry (e.g. after a repo move or source→exe migration).
 - **`NotificationManager`** — `plyer` for toast + `winsound`/`paplay` for sound; runs in a daemon thread so it never blocks pollers. On Windows, winotify toasts include the app icon (`APP_ICO`). Tracks recently notified `(wid, sub_key)` tuples via `_recently_notified` for blink-on-focus. Toast body `launch` points to `_focus.vbs` which creates `_focus_signal`; the main loop polls for this file and calls `_show_window()` + `_blink_row()` on matching rows.
 - **`UpdateChecker`** + **`UpdateDialog`** — live in `src/update.py`. On startup (frozen builds only), `UpdateChecker.check()` polls the GitHub Releases API and compares `BUILD_COMMIT` against the latest release. If behind, `UpdateDialog` offers a modal flow to download, verify, extract, and swap the executable + `_internal/` folder via a detached helper script. `_detect_install_source()` distinguishes scoop / winget / direct installs and surfaces the appropriate package-manager command instead of swapping in place.
 
@@ -123,7 +150,7 @@ ActorWorkflowPoller._poll()   # actor mode
 
 ### Section sorting
 
-Each section header has clickable Status/Updated/Created sort labels. `_section_sort[title]` stores the active sort mode (`"status_asc"`, `"updated_desc"`, etc. or `None`). Only one sort is active globally — `_cycle_sort()` clears all others before setting the new one. `_sort_section()` collects rows for a section, sorts them, and re-packs. `_STATUS_PRIORITY` (module-level) maps status constants to numeric priority. Sort state persists in `state.json` under `"section_sort"`. After row creation/removal, `_resort_section_for_wid()` triggers re-sort if the section has an active sort.
+Each section header has clickable Status/Updated/Created sort labels. `_section_sort[title]` stores the active sort mode (`"status_asc"`, `"updated_desc"`, etc. or `None`). Sorts are independent per section — `_cycle_sort()` only touches the clicked section. `_sort_section()` collects rows for a section, sorts them, and re-packs. `_STATUS_PRIORITY` (module-level) maps status constants to numeric priority. Sort state persists in `state.json` under `"section_sort"`. After row creation/removal, `_resort_section_for_wid()` triggers re-sort if the section has an active sort.
 
 ## Visual system
 
@@ -166,7 +193,7 @@ Tooltips use Qt's built-in `widget.setToolTip(text)`. Styled via QSS in `DARK_ST
 
 ### Tray icon colour precedence
 
-`_combined_status()` priority: failure > running > queued > success > unknown.
+`_combined_status()` priority (via `_STATUS_PRIORITY`): failure > running > queued > cancelled > success > skipped > unknown.
 
 ## Persistence
 

@@ -83,6 +83,13 @@ def _detect_install_source() -> str:
     exe = str(Path(sys.executable)).replace("/", "\\").lower()
     if "\\scoop\\apps\\" in exe:
         return "scoop"
+    # Custom scoop roots (SCOOP=D:\sc) don't contain "\scoop\"; match scoop's
+    # signature layout (apps\<name>\current\) and the SCOOP env var instead.
+    scoop_root = os.environ.get("SCOOP", "").replace("/", "\\").lower().rstrip("\\")
+    if scoop_root and exe.startswith(scoop_root + "\\apps\\"):
+        return "scoop"
+    if re.search(r"\\apps\\[^\\]+\\current\\", exe):
+        return "scoop"
     if "\\winget\\packages\\" in exe:
         return "winget"
     return "direct"
@@ -117,7 +124,15 @@ def _cleanup_stale_mei_dirs(min_age_seconds: int = 86400) -> None:
                     continue
                 if entry.stat().st_mtime > cutoff:
                     continue
-                shutil.rmtree(entry, ignore_errors=True)
+                # Rename-guard: a live PyInstaller onefile app (possibly another
+                # tool entirely) holds open files in its _MEI dir — the rename
+                # fails on Windows, so we skip instead of gutting a running app.
+                trash = entry.with_name(entry.name + ".stale")
+                try:
+                    entry.rename(trash)
+                except OSError:
+                    continue
+                shutil.rmtree(trash, ignore_errors=True)
             except OSError:
                 pass
     except Exception:
@@ -366,6 +381,9 @@ class UpdateChecker:
             log_path = tmp_dir / "am_update.log"
             script.write_text(
                 "@echo off\r\n"
+                # UTF-8 codepage so non-ASCII install paths (accented user
+                # names) survive — the file itself is written as UTF-8 below.
+                "chcp 65001 >nul\r\n"
                 f'set "LOG={log_path}"\r\n'
                 'echo === am_update helper starting === > "%LOG%"\r\n'
                 'echo date=%DATE% time=%TIME% >> "%LOG%"\r\n'
@@ -377,7 +395,9 @@ class UpdateChecker:
                 'echo [waiting for pid to exit] >> "%LOG%"\r\n'
                 "set /a wait_tries=0\r\n"
                 ":waitpid\r\n"
-                f'tasklist /FI "PID eq {pid}" 2>nul | findstr /C:"{pid}" >nul\r\n'
+                # Filter by image name too — if the OS recycles our PID for an
+                # unrelated process, we must neither wait on nor kill it.
+                f'tasklist /FI "PID eq {pid}" /FI "IMAGENAME eq {current_exe.name}" 2>nul | findstr /C:"{pid}" >nul\r\n'
                 "if %errorlevel% NEQ 0 goto exited\r\n"
                 "set /a wait_tries+=1\r\n"
                 "if %wait_tries% GEQ 30 goto force_kill\r\n"
@@ -385,7 +405,7 @@ class UpdateChecker:
                 "goto waitpid\r\n"
                 ":force_kill\r\n"
                 f'echo [waitpid timed out after %wait_tries% iterations; force-killing pid={pid}] >> "%LOG%"\r\n'
-                f'taskkill /F /PID {pid} >> "%LOG%" 2>&1\r\n'
+                f'taskkill /F /FI "IMAGENAME eq {current_exe.name}" /PID {pid} >> "%LOG%" 2>&1\r\n'
                 "ping -n 3 127.0.0.1 >nul\r\n"
                 ":exited\r\n"
                 'echo [pid exited, attempting swap] >> "%LOG%"\r\n'
@@ -449,7 +469,7 @@ class UpdateChecker:
                 f'start "" "{current_exe}"\r\n'
                 'echo [done] >> "%LOG%"\r\n'
                 '(goto) 2>nul & del "%~f0"\r\n',
-                encoding="ascii",
+                encoding="utf-8",
             )
             # CREATE_NO_WINDOW alone — DETACHED_PROCESS is for GUI children
             # and combining the two is documented as undefined; on Win11 with
@@ -484,7 +504,11 @@ class UpdateChecker:
                 f'echo "src_internal={src_internal}"\n'
                 "echo '[waiting for pid to exit]'\n"
                 "wait_tries=0\n"
-                f"while kill -0 {pid} 2>/dev/null; do\n"
+                # /proc comm check guards against PID reuse — never wait on or
+                # kill a recycled PID that now belongs to another process.
+                # (comm is truncated to 15 chars by the kernel.)
+                f'COMM="{current_exe.name[:15]}"\n'
+                f'while [ "$(cat /proc/{pid}/comm 2>/dev/null)" = "$COMM" ]; do\n'
                 "  wait_tries=$((wait_tries + 1))\n"
                 "  if [ $wait_tries -ge 120 ]; then\n"
                 f"    echo \"[waitpid timed out after $wait_tries iterations; force-killing pid={pid}]\"\n"
@@ -701,3 +725,6 @@ class UpdateDialog(QDialog):
             self._status_lbl.setText(f"Update failed: {msg}")
             self._status_lbl.setStyleSheet(f"color: {_COLOR_FAILURE}; font-size: 12px;")
             self._skip_btn.setEnabled(True)
+            # Re-enable Update so a transient failure (dropped connection,
+            # size mismatch) can be retried without restarting the app.
+            self._update_btn.setEnabled(True)

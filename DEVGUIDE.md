@@ -47,9 +47,19 @@ sudo apt-get install -y python3-pip python3-tk python3-venv gir1.2-gtk-3.0 gir1.
 pip3 install --break-system-packages -r src/requirements.txt pyinstaller
 ```
 
+## GitHub account: everything as WizX20
+
+This repo is published from a machine that also has a work GitHub account logged in to `gh`. Rather than `gh auth switch` back and forth, the repo carries a [`.gitconfig`](.gitconfig) that a maintainer includes once per clone:
+
+```powershell
+task setup      # = git config --local include.path ../.gitconfig
+```
+
+From then on, inside this clone, commits are authored as `WizX20 <…>`, `git push` / `git fetch` authenticate as WizX20 (the credential helper obtains that account's token from the keyring at call time via `gh auth token --user WizX20` and hands it to `gh auth git-credential` through `GH_TOKEN` — the CLI's helper otherwise only serves the *active* account), and `git gh <anything>` (or `task gh -- <anything>`) runs the GitHub CLI the same way: `git gh pr create`, `git gh run watch`, … Nothing is written to disk and the active `gh` account is untouched. Plain `gh` still uses whatever account is active — use `git gh` in this repo. Contributors never need any of this; without the include the file is inert.
+
 ## Release process
 
-Releases are driven by `.github/workflows/release.yml` (manual dispatch only). The workflow:
+Releases are driven by `.github/workflows/_release.yml`, called by `build.yml` (**weekly**, Tuesday 06:00 UTC, Scoop only) and by `release.yml` (manual dispatch, Scoop + optional winget). The workflow:
 
 1. **`check`** — first verifies that the latest completed CI run on `main` is `success` (`gh run list -w ci.yml -b main --status completed -L 1`); aborts the release if not. Then compares HEAD to the latest release's `targetCommitish`; skips if identical.
 2. **`build`** — calls the reusable `_build.yml` workflow (shared with CI). Runs PyInstaller on `windows-latest` / `ubuntu-latest`; embeds a 7-char commit SHA into `src/version.py`.
@@ -61,17 +71,13 @@ Releases are driven by `.github/workflows/release.yml` (manual dispatch only). T
 
 `.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It calls the same `_build.yml` reusable workflow, so PR builds use the identical PyInstaller pipeline as releases — Windows + Linux artifacts are attached to each run for download.
 
-#### Required status checks (branch protection)
+#### Branch rules (ruleset `main`)
 
-Configure on GitHub: **Settings → Branches → Branch protection rules → `main`**. Enable **Require status checks to pass before merging** and select:
-
-- `build / build-windows`
-- `build / build-linux`
-
-A PR with a failing CI run is then blocked from merging. Names appear in the picker after the first CI run lands; trigger one PR first if the list is empty.
+Managed on GitHub: **Settings → Rules → Rulesets → main**. Pull request required, `squash` the only merge method, required checks `build / build-windows` and `build / build-linux`, deletion and force-push blocked; bypass list: repository admin only. Nobody but the owner can push to `main`, and a PR cannot be squash-merged before CI is green. Check names appear in the ruleset picker after the first CI run lands.
 
 ### Required secrets
 
+- **`ACTIONSMONITOR_RELEASE_TOKEN`** — fine-grained PAT of the owner: resource owner `WizX20`, repository access `ActionsMonitor` (PSWorktree has its own token, `PSWORKTREE_RELEASE_TOKEN`), permission **Contents: Read and write**, expiry one year at most (note the date). `main` only accepts pull requests and `GITHUB_TOKEN` cannot bypass a ruleset on a user-owned repository, so `update-scoop` pushes the manifest bump with this token (repository admin → bypass). Set it with `git gh secret set ACTIONSMONITOR_RELEASE_TOKEN -R WizX20/ActionsMonitor`; the job fails early with a clear message when it is missing. CI's required **release token expiry** job reads the token's real expiry from the API on every PR and push: a warning 30 days out, a failure 14 days out, so an expiring token blocks merges until it is rotated. A push with this token also triggers CI on `main` for the bump commit — expected, one extra run per release.
 - **`WINGET_PAT`** — classic GitHub PAT with `public_repo` scope, issued from an account that maintains a fork of [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs). `wingetcreate` pushes the manifest update to that fork and opens a PR upstream.
 
 ### First-time winget bootstrap

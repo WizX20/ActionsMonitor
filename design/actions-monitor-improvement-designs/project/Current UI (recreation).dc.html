@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html, body { margin: 0; padding: 0; background: #0E0C0B; }
+  a { color: #FBBF24; text-decoration: none; }
+  a:hover { color: #F59E0B; text-decoration: underline; }
+</style>
+</helmet>
+<div style="display: flex; justify-content: center; padding: 32px; font-family: 'Segoe UI', 'DejaVu Sans', system-ui, sans-serif;" data-screen-label="Current UI recreation">
+  <div style="width: 560px; background: #1C1917; color: #E7E5E4; display: flex; flex-direction: column; border: 1px solid #0A0908; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+
+    <!-- Header -->
+    <div style="height: 54px; display: flex; align-items: center; padding: 0 14px; gap: 0; flex: none;">
+      <img src="docs/wizx20_small.png" alt="WizX20" style="height: 40px; width: auto; cursor: pointer;">
+      <div style="color: #E7E5E4; font-size: 15px; margin: 0 16px 0 10px;">Actions Monitor</div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <img src="assets/hdr-help.png" title="Open README on GitHub" style="width: 24px; height: 24px; cursor: pointer;">
+        <img src="assets/hdr-update.png" title="Check for updates" style="width: 24px; height: 24px; cursor: pointer;">
+        <img src="assets/hdr-refresh.png" title="Refresh all workflows" style="width: 24px; height: 24px; cursor: pointer;">
+      </div>
+    </div>
+    <div style="height: 1px; background: #44403C; flex: none;"></div>
+
+    <!-- Column headers -->
+    <div style="display: flex; padding: 6px 14px 2px 14px; flex: none;">
+      <div style="flex: 1; color: #A8A29E; font-size: 9px; font-weight: bold;">STATUS / WORKFLOW</div>
+      <div style="color: #A8A29E; font-size: 9px; font-weight: bold;">POLL</div>
+    </div>
+
+    <!-- Scroll list -->
+    <div style="flex: 1; padding: 0 8px 8px 8px; display: flex; flex-direction: column;">
+
+      <!-- Section: Workflows -->
+      <div style="display: flex; align-items: center; gap: 6px; padding: 10px 0 4px 12px; cursor: pointer;">
+        <span style="color: #FBBF24; font-size: 12px; font-weight: bold;">▾</span>
+        <span style="color: #FBBF24; font-size: 12px; font-weight: bold;">Workflows</span>
+        <div style="flex: 1; height: 1px; background: #44403C;"></div>
+      </div>
+      <div style="background: #292524; display: flex; align-items: center; padding: 0 4px;">
+        <span style="color: #E7E5E4; font-size: 11px; font-weight: bold; padding: 3px 6px;">SORT:</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Status ·</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Updated ·</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Created ·</span>
+        <div style="flex: 1;"></div>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 8px; cursor: pointer;">✕</span>
+      </div>
+
+      <!-- Row: Acceptance Merge (success) -->
+      <div style="display: flex; background: #292524;">
+        <div style="width: 3px; background: #4ADE80; flex: none;"></div>
+        <div style="padding: 8px 10px 4px 12px; flex: none;">
+          <img src="assets/status-success.png" style="width: 24px; height: 24px;">
+        </div>
+        <div style="flex: 1; padding: 8px 0 6px 0; display: flex; flex-direction: column;">
+          <div style="color: #E7E5E4; font-size: 12px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Acceptance Merge</div>
+          <div style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Success — run #3951  (29 Apr 14:14)</div>
+        </div>
+        <div style="display: flex; gap: 4px; padding: 10px 12px 0 4px; align-items: flex-start; flex: none;">
+          <span style="color: #A8A29E; font-size: 11px;">30s</span>
+          <img src="assets/snooze-normal.png" title="Snooze - pause polling, dim the row, mute notifications" style="width: 16px; height: 16px; cursor: pointer;">
+        </div>
+      </div>
+      <!-- Row: Production Merge (success, alt) -->
+      <div style="display: flex; background: #231F1E;">
+        <div style="width: 3px; background: #4ADE80; flex: none;"></div>
+        <div style="padding: 8px 10px 4px 12px; flex: none;">
+          <img src="assets/status-success.png" style="width: 24px; height: 24px;">
+        </div>
+        <div style="flex: 1; padding: 8px 0 6px 0; display: flex; flex-direction: column;">
+          <div style="color: #E7E5E4; font-size: 12px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Production Merge</div>
+          <div style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Success — run #386  (29 Apr 14:46)</div>
+        </div>
+        <div style="display: flex; gap: 4px; padding: 10px 12px 0 4px; align-items: flex-start; flex: none;">
+          <span style="color: #A8A29E; font-size: 11px;">30s</span>
+          <img src="assets/snooze-normal.png" style="width: 16px; height: 16px; cursor: pointer;">
+        </div>
+      </div>
+
+      <!-- Section: Acceptance/PR -->
+      <div style="display: flex; align-items: center; gap: 6px; padding: 10px 0 4px 12px; cursor: pointer;">
+        <span style="color: #FBBF24; font-size: 12px; font-weight: bold;">▾</span>
+        <span style="color: #FBBF24; font-size: 12px; font-weight: bold;">Acceptance/PR</span>
+        <div style="flex: 1; height: 1px; background: #44403C;"></div>
+      </div>
+      <div style="background: #292524; display: flex; align-items: center; padding: 0 4px;">
+        <span style="color: #E7E5E4; font-size: 11px; font-weight: bold; padding: 3px 6px;">SORT:</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Status ·</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Updated ·</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Created ·</span>
+        <div style="flex: 1;"></div>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 8px; cursor: pointer;">✕</span>
+      </div>
+
+      <!-- Row: snoozed failed PR -->
+      <div style="display: flex; background: #292524;">
+        <div style="width: 3px; background: #3F3B38; flex: none;"></div>
+        <div style="padding: 8px 10px 4px 12px; flex: none;">
+          <img src="assets/status-failure.png" style="width: 24px; height: 24px; opacity: 0.35;">
+        </div>
+        <div style="flex: 1; padding: 8px 0 6px 0; display: flex; flex-direction: column;">
+          <div style="color: #57534E; font-size: 12px; cursor: pointer;">CHORE: Fix CS0618 obsolete-member warnings in IntegrationTests</div>
+          <div style="display: flex; gap: 20px;">
+            <span style="color: #44403C; font-size: 11px;">#4220  fix-some-integrationtest-warnings</span>
+            <span style="color: #44403C; font-size: 11px;">→ acceptance</span>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 2px; align-items: center;">
+            <span style="background: #2C2825; color: #57534E; font-size: 9px; padding: 1px 3px; border-radius: 2px;">chore</span>
+            <span style="background: #2C2825; color: #57534E; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">DRAFT</span>
+            <span style="background: #2C2825; color: #57534E; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">SNOOZED</span>
+          </div>
+          <div style="color: #44403C; font-size: 11px;">Failed</div>
+        </div>
+        <div style="display: flex; gap: 4px; padding: 10px 12px 0 4px; align-items: flex-start; flex: none;">
+          <span style="color: #44403C; font-size: 11px;">30s</span>
+          <img src="assets/snooze-active.png" title="Unsnooze - resume polling and notifications" style="width: 16px; height: 16px; cursor: pointer;">
+        </div>
+      </div>
+
+      <!-- Row: snoozed success PR (alt) -->
+      <div style="display: flex; background: #231F1E;">
+        <div style="width: 3px; background: #3F3B38; flex: none;"></div>
+        <div style="padding: 8px 10px 4px 12px; flex: none;">
+          <img src="assets/status-success.png" style="width: 24px; height: 24px; opacity: 0.35;">
+        </div>
+        <div style="flex: 1; padding: 8px 0 6px 0; display: flex; flex-direction: column;">
+          <div style="color: #57534E; font-size: 12px; cursor: pointer;">EDU-7171: Adds business validation using ValidationError + Documentation</div>
+          <div style="display: flex; gap: 20px;">
+            <span style="color: #44403C; font-size: 11px;">#3154  EDU-7171-backend-een-validatie-foutmelding-geven</span>
+            <span style="color: #44403C; font-size: 11px;">→ acceptance</span>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 2px; align-items: center;">
+            <span style="background: #2C2825; color: #57534E; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">DRAFT</span>
+            <span style="background: #2C2825; color: #57534E; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">SNOOZED</span>
+          </div>
+          <div style="color: #44403C; font-size: 11px;">Success</div>
+        </div>
+        <div style="display: flex; gap: 4px; padding: 10px 12px 0 4px; align-items: flex-start; flex: none;">
+          <span style="color: #44403C; font-size: 11px;">30s</span>
+          <img src="assets/snooze-active.png" style="width: 16px; height: 16px; cursor: pointer;">
+        </div>
+      </div>
+
+      <!-- Row: unknown PR with badges -->
+      <div style="display: flex; background: #292524;">
+        <div style="width: 3px; background: #A8A29E; flex: none;"></div>
+        <div style="padding: 8px 10px 4px 12px; flex: none;">
+          <img src="assets/status-unknown.png" style="width: 24px; height: 24px;">
+        </div>
+        <div style="flex: 1; padding: 8px 0 6px 0; display: flex; flex-direction: column;">
+          <div style="color: #E7E5E4; font-size: 12px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">EDU-9303: Consolidate UseCaseError handling and fix log severity (DRAFT)</div>
+          <div style="display: flex; gap: 20px;">
+            <span style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">#4308  EDU-9303-consolidate-usecase-error-handling</span>
+            <span style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">→ acceptance</span>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 2px; align-items: center;">
+            <span style="background: #92400E; color: #FEF3C7; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">DRAFT</span>
+            <span style="background: #7F1D1D; color: #FEE2E2; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">⚠ CONFLICT</span>
+            <span style="background: #3D3530; color: #FBBF24; font-size: 9px; padding: 1px 3px; border-radius: 2px;">REVIEW PENDING</span>
+          </div>
+          <div style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Unknown</div>
+        </div>
+        <div style="display: flex; gap: 4px; padding: 10px 12px 0 4px; align-items: flex-start; flex: none;">
+          <span style="color: #A8A29E; font-size: 11px;">30s</span>
+          <img src="assets/snooze-normal.png" style="width: 16px; height: 16px; cursor: pointer;">
+        </div>
+      </div>
+
+      <!-- Section: HippoCampus - Open for Review -->
+      <div style="display: flex; align-items: center; gap: 6px; padding: 10px 0 4px 12px; cursor: pointer;">
+        <span style="color: #FBBF24; font-size: 12px; font-weight: bold;">▾</span>
+        <span style="color: #FBBF24; font-size: 12px; font-weight: bold;">HippoCampus - Open for Review</span>
+        <div style="flex: 1; height: 1px; background: #44403C;"></div>
+      </div>
+      <div style="background: #292524; display: flex; align-items: center; padding: 0 4px;">
+        <span style="color: #E7E5E4; font-size: 11px; font-weight: bold; padding: 3px 6px;">SORT:</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Status ·</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Updated ·</span>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 6px; cursor: pointer;" style-hover="color: #FBBF24;">Created ·</span>
+        <div style="flex: 1;"></div>
+        <span style="color: #A8A29E; font-size: 11px; padding: 3px 8px; cursor: pointer;">✕</span>
+      </div>
+
+      <!-- Row: hotfix PR -->
+      <div style="display: flex; background: #292524;">
+        <div style="width: 3px; background: #A8A29E; flex: none;"></div>
+        <div style="padding: 8px 10px 4px 12px; flex: none;">
+          <img src="assets/status-unknown.png" style="width: 24px; height: 24px;">
+        </div>
+        <div style="flex: 1; padding: 8px 0 6px 0; display: flex; flex-direction: column;">
+          <div style="color: #E7E5E4; font-size: 12px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">EDU-9350 HOTFIX | PROD: Fix BulkMailSender non-performant query in InterruptMailsStuckAtSendingStarted</div>
+          <div style="display: flex; gap: 20px;">
+            <span style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">#4321  EDU-9350-interrupt-stuck-bulk-mails-executeupdateasync</span>
+            <span style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">→ production</span>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 2px; align-items: center;">
+            <span style="background: #3D3530; color: #FBBF24; font-size: 9px; padding: 1px 3px; border-radius: 2px;">hotfix</span>
+            <span style="background: #7F1D1D; color: #FEE2E2; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">⚠ CONFLICT</span>
+            <span style="background: #3D3530; color: #FBBF24; font-size: 9px; padding: 1px 3px; border-radius: 2px;">REVIEW PENDING</span>
+            <span style="background: #3A2A1C; color: #F97316; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 2px;">STALE 4d</span>
+          </div>
+          <div style="color: #A8A29E; font-size: 11px; cursor: pointer;" style-hover="color: #FBBF24; text-decoration: underline;">Unknown</div>
+        </div>
+        <div style="display: flex; gap: 4px; padding: 10px 12px 0 4px; align-items: flex-start; flex: none;">
+          <span style="color: #A8A29E; font-size: 11px;">120s</span>
+          <img src="assets/snooze-normal.png" style="width: 16px; height: 16px; cursor: pointer;">
+        </div>
+      </div>
+
+      <div style="height: 40px;"></div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background: #292524; flex: none;">
+      <div style="height: 1px; background: #44403C;"></div>
+      <div style="display: flex; gap: 18px; padding: 14px 14px 6px 14px; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <div style="width: 14px; height: 14px; border-radius: 3px; background: #FBBF24; border: 1px solid #FBBF24; display: flex; align-items: center; justify-content: center; color: #1C1917; font-size: 11px; font-weight: bold; line-height: 1;">✓</div>
+          <span style="color: #A8A29E; font-size: 11px;">Start with Windows</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <div style="width: 14px; height: 14px; border-radius: 3px; background: #FBBF24; border: 1px solid #FBBF24; display: flex; align-items: center; justify-content: center; color: #1C1917; font-size: 11px; font-weight: bold; line-height: 1;">✓</div>
+          <span style="color: #A8A29E; font-size: 11px;">Minimize to tray on close</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <div style="width: 14px; height: 14px; border-radius: 3px; background: #1C1917; border: 1px solid #57534E;"></div>
+          <span style="color: #A8A29E; font-size: 11px;">Always on top</span>
+        </div>
+      </div>
+      <div style="display: flex; padding: 6px 14px 10px 14px; align-items: center;">
+        <span style="color: #A8A29E; font-size: 11px;">Edit config.yaml to add/change workflows.</span>
+        <div style="flex: 1;"></div>
+        <span style="color: #FBBF24; font-size: 11px; font-weight: bold; cursor: pointer;">Open config ↗</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

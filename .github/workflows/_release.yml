@@ -22,6 +22,9 @@ on:
     secrets:
       WINGET_PAT:
         required: false
+      ACTIONSMONITOR_RELEASE_TOKEN:
+        description: "Fine-grained PAT of the owner (Contents: read/write). main only accepts pull requests; the scoop manifest bump is pushed with this token, which bypasses that rule as repository admin."
+        required: false
 
 permissions:
   contents: write
@@ -41,18 +44,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Block release when the latest completed CI run on main is not
-          # success. Daily Build (cron) and Release (manual dispatch) both
-          # funnel through here, so this single gate covers both callers.
-          CONCLUSION=$(gh run list -w ci.yml -b main --status completed -L 1 --json conclusion -q '.[0].conclusion' 2>/dev/null || echo "")
-          if [ -z "$CONCLUSION" ]; then
-            echo "No completed CI run on main yet — allowing release through."
-          elif [ "$CONCLUSION" != "success" ]; then
-            echo "Latest CI run on main is '$CONCLUSION'. Refusing to release."
-            exit 1
-          else
-            echo "Latest CI run on main is success."
-          fi
+          # Block release unless the CI run of the exact commit being released
+          # is success. Weekly Build (cron) and Release (manual dispatch) both
+          # funnel through here, so this single gate covers both callers. It
+          # looks at HEAD's own run rather than "the latest completed run on
+          # main", which after quick successive merges can be a superseded,
+          # cancelled one; while HEAD's run is still going it waits (20 min max).
+          SHA=$(git rev-parse HEAD)
+          for attempt in $(seq 1 40); do
+            RUN=$(gh run list -w ci.yml -c "$SHA" -L 1 --json status,conclusion -q '.[0] | "\(.status)/\(.conclusion)"' 2>/dev/null || echo "")
+            case "$RUN" in
+              "") echo "No CI run for $SHA — allowing release through."; exit 0 ;;
+              completed/success) echo "CI for $SHA is success."; exit 0 ;;
+              completed/*) echo "CI for $SHA ended as '${RUN#completed/}'. Refusing to release."; exit 1 ;;
+              *) echo "CI for $SHA is $RUN — waiting..."; sleep 30 ;;
+            esac
+          done
+          echo "CI for $SHA did not finish in time. Refusing to release."
+          exit 1
 
       - name: Check for changes since last release
         id: check
@@ -75,7 +84,7 @@ jobs:
           elif [ -n "$LATEST" ] && [ -z "$(git diff --name-only "$LATEST" "$HEAD" -- . ':(exclude)bucket/actionsmonitor.json')" ]; then
             # Only the scoop manifest changed since last release. The post-release
             # update-scoop job pushes that file to main, so without this guard the
-            # next Daily Build would self-perpetuate (bump → release → bump → ...).
+            # next Weekly Build would self-perpetuate (bump → release → bump → ...).
             echo "should_build=false" >> "$GITHUB_OUTPUT"
             echo "Only scoop manifest changed since last release ($SHORT) — skipping"
           else
@@ -176,6 +185,19 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      - name: Require the ACTIONSMONITOR_RELEASE_TOKEN secret
+        env:
+          HAS_TOKEN: ${{ secrets.ACTIONSMONITOR_RELEASE_TOKEN != '' }}
+        run: |
+          # GITHUB_TOKEN cannot bypass the pull-request rule on main (user-owned repo).
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::Repository secret ACTIONSMONITOR_RELEASE_TOKEN is missing - the manifest bump push to main would be rejected. See DEVGUIDE.md."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.ACTIONSMONITOR_RELEASE_TOKEN }}
 
       - uses: actions/download-artifact@v8
         with:
