@@ -1,0 +1,10 @@
+# Normalise line endings in the repo.
+* text=auto
+# bash is not so forgiving: a CR ends up in the command.
+*.sh text eol=lf
+# cmd.exe misreads labels and blocks in a batch file with LF endings.
+*.bat text eol=crlf
+
+*.png binary
+*.ico binary
+*.zip binary
